@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<modDesc descVersion="73">
+    <author>CyberG3nius</author>
+    <version>1.0.0.0</version>
+    <title>
+        <en>FarmNotify</en>
+        <de>FarmNotify</de>
+    </title>
+    <description>
+        <en>In-game mobile phone notification system. Receive WhatsApp-style alerts when fields are harvest-ready, silos are full, or machines need attention.</en>
+        <de>In-Game Handy-Benachrichtigungssystem. Erhalte WhatsApp-ähnliche Meldungen wenn Felder erntereif sind, Silos voll sind oder Maschinen Aufmerksamkeit benötigen.</de>
+    </description>
+    <iconFilename>icon_farmnotify.dds</iconFilename>
+    <multiplayer supported="true"/>
+    <extraSourceFiles>
+        <sourceFile filename="scripts/FarmNotify.lua"/>
+        <sourceFile filename="scripts/NotificationManager.lua"/>
+        <sourceFile filename="scripts/FieldMonitor.lua"/>
+        <sourceFile filename="scripts/PhoneUI.lua"/>
+    </extraSourceFiles>
+    <l10n filenamePrefix="lang/lang"/>
+</modDesc>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<l10n>
+    <text name="farmnotify_harvest_ready_title">Erntereif</text>
+    <text name="farmnotify_harvest_ready_msg">%s auf Feld %d kann jetzt geerntet werden.</text>
+    <text name="farmnotify_harvest_overdue_title">Ernte überfällig!</text>
+    <text name="farmnotify_harvest_overdue_msg">Feld %d — Frucht droht zu verwelken!</text>
+    <text name="farmnotify_silo_full_title">Silo voll</text>
+    <text name="farmnotify_silo_full_msg">%s ist voll. Kapazität prüfen.</text>
+    <text name="farmnotify_inbox_title">FarmNotify — Benachrichtigungen</text>
+    <text name="farmnotify_no_notifications">Keine neuen Benachrichtigungen.</text>
+</l10n>

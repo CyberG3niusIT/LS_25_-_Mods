@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<l10n>
+    <text name="farmnotify_harvest_ready_title">Harvest Ready</text>
+    <text name="farmnotify_harvest_ready_msg">%s on Field %d is ready for harvest.</text>
+    <text name="farmnotify_harvest_overdue_title">Harvest Overdue!</text>
+    <text name="farmnotify_harvest_overdue_msg">Field %d — crop is about to wilt!</text>
+    <text name="farmnotify_silo_full_title">Silo Full</text>
+    <text name="farmnotify_silo_full_msg">%s is full. Check capacity.</text>
+    <text name="farmnotify_inbox_title">FarmNotify — Notifications</text>
+    <text name="farmnotify_no_notifications">No new notifications.</text>
+</l10n>
