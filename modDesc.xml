@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<modDesc descVersion="73">
+    <author>CyberG3nius</author>
+    <version>1.0.0.0</version>
+    <title>
+        <en>SmartWorker</en>
+        <de>SmartWorker</de>
+    </title>
+    <description>
+        <en>Enhanced AI worker system for Farming Simulator 25. Workers make smarter decisions about field prioritization, equipment selection, and task scheduling.</en>
+        <de>Verbessertes KI-Helfersystem für Landwirtschafts-Simulator 25. Helfer treffen intelligentere Entscheidungen bei Feldpriorisierung, Gerätewahl und Aufgabenplanung.</de>
+    </description>
+    <iconFilename>icon_smartworker.dds</iconFilename>
+    <multiplayer supported="true"/>
+    <extraSourceFiles>
+        <sourceFile filename="scripts/SmartWorker.lua"/>
+        <sourceFile filename="scripts/FieldAnalyzer.lua"/>
+        <sourceFile filename="scripts/WorkerScheduler.lua"/>
+        <sourceFile filename="scripts/PriorityQueue.lua"/>
+    </extraSourceFiles>
+</modDesc>
