@@ -151,6 +151,7 @@ end
 function FarmNotify:delete()
     SoundController:delete()
     PhoneModel:delete()
+    PhoneUI:delete()
     print("[FarmNotify] Shutdown complete.")
 end
 

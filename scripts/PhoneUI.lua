@@ -6,8 +6,8 @@ PhoneUI = {}
 
 -- Colors (r,g,b,a 0-1)
 PhoneUI.C = {
-    screenBg     = {0.05,  0.05,  0.07,  1.0 },
-    headerBg     = {0.07,  0.07,  0.10,  1.0 },
+    screenBg     = {0.00,  0.00,  0.00,  0.0 },   -- transparent — wallpaper shows through
+    headerBg     = {0.04,  0.04,  0.06,  0.82},
     accent       = {0.20,  0.78,  0.35,  1.0 },  -- WhatsApp/message green
     accentOrange = {0.95,  0.60,  0.10,  1.0 },  -- warnings
     accentRed    = {0.90,  0.20,  0.20,  1.0 },  -- urgent
@@ -19,7 +19,7 @@ PhoneUI.C = {
     unreadDot    = {0.20,  0.78,  0.35,  1.0 },
     timeText     = {0.55,  0.55,  0.60,  1.0 },
     pressedBg    = {0.15,  0.15,  0.20,  0.9 },
-    notifBg      = {0.10,  0.10,  0.14,  0.96},
+    notifBg      = {0.08,  0.08,  0.12,  0.88},
 }
 
 -- Icon characters (rendered as text — for proper icons, use DDS overlay)
@@ -46,16 +46,24 @@ PhoneUI.NOTIF_COLOR = {
     weather_storm   = {0.90, 0.20, 0.20, 1.0},
 }
 
-PhoneUI.modDir   = nil
-PhoneUI.scrollY  = 0       -- inbox scroll offset (rows)
-PhoneUI.maxScroll = 0
+PhoneUI.modDir        = nil
+PhoneUI.scrollY       = 0
+PhoneUI.maxScroll     = 0
 PhoneUI.INBOX_ROWS_VISIBLE = 6
-PhoneUI.ROW_HEIGHT = 0  -- computed at draw time
-PhoneUI.hoveredId = nil
+PhoneUI.ROW_HEIGHT    = 0
+PhoneUI.hoveredId     = nil
+PhoneUI.wallpaper     = nil   -- Overlay for phone wallpaper
 
 function PhoneUI:init(modDir)
     self.modDir  = modDir
     self.scrollY = 0
+    local wpPath = modDir .. "textures/phones/phone_wallpaper.png"
+    self.wallpaper = Overlay.new(wpPath, 0, 0, 0.1, 0.1)
+    if self.wallpaper == nil then
+        print("[FarmNotify] Wallpaper not found: " .. wpPath)
+    else
+        print("[FarmNotify] Wallpaper loaded.")
+    end
     print("[FarmNotify] PhoneUI initialized.")
 end
 
@@ -76,10 +84,12 @@ function PhoneUI:draw()
     -- Black screen background
     self:_fillRect(sx, sy, sw, sh, self.C.screenBg)
 
+    -- Wallpaper always behind everything
+    self:_drawWallpaper(sx, sy, sw, sh)
+
     if animator:isInboxOpen() then
         self:_drawInbox(sx, sy, sw, sh)
     else
-        -- Show current notification on phone screen
         local notif = animator.activeNotif
         if notif ~= nil then
             self:_drawNotificationScreen(sx, sy, sw, sh, notif)
@@ -88,6 +98,23 @@ function PhoneUI:draw()
 
     -- Status bar (time + signal) always visible
     self:_drawStatusBar(sx, sy, sw, sh)
+end
+
+-- ─── Wallpaper ─────────────────────────────────────────────────────────────
+
+function PhoneUI:_drawWallpaper(sx, sy, sw, sh)
+    if self.wallpaper == nil then
+        -- Fallback: dark gradient background
+        self:_fillRect(sx, sy, sw, sh * 0.5, {0.05, 0.08, 0.15, 1.0})
+        self:_fillRect(sx, sy + sh * 0.5, sw, sh * 0.5, {0.02, 0.04, 0.08, 1.0})
+        return
+    end
+    -- Render wallpaper scaled to fit screen area
+    self.wallpaper:setPosition(sx, sy)
+    self.wallpaper:setDimension(sw, sh)
+    self.wallpaper:render()
+    -- Dim overlay so text stays readable
+    self:_fillRect(sx, sy, sw, sh, {0.0, 0.0, 0.0, 0.35})
 end
 
 -- ─── Notification Screen ───────────────────────────────────────────────────
@@ -376,4 +403,11 @@ function PhoneUI:_drawTextCentered(x, y, size, text, width)
     setTextAlignment(RenderText.ALIGN_CENTER)
     renderText(x + width * 0.5, y, size, tostring(text))
     setTextAlignment(RenderText.ALIGN_LEFT)
+end
+
+function PhoneUI:delete()
+    if self.wallpaper ~= nil then
+        self.wallpaper:delete()
+        self.wallpaper = nil
+    end
 end
