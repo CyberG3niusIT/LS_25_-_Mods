@@ -19,34 +19,30 @@ PhoneModel.MODELS = {
     iphone = {
         id           = "iphone",
         displayName  = "iPhone 16 Pro Max",
-        frameTexture = "textures/phones/iphone16promax_frame.dds",
-        -- Aspect ratio of the phone image (portrait)
+        frameTexture = "textures/phones/iphone16promax_frame.png",
         aspectRatio  = 9 / 19.5,
-        -- Screen content bounds inside phone frame (0-1 of frame dimensions)
         screen = {
-            x = 0.058,
-            y = 0.042,
-            w = 0.884,
-            h = 0.886,
+            x = 0.080,
+            y = 0.040,
+            w = 0.840,
+            h = 0.920,
         },
-        -- Dynamic Island position (top-center of screen) — for decoration only
         notch = { style = "dynamic_island", relX = 0.35, relY = 0.93, relW = 0.30, relH = 0.04 },
-        -- Status bar height within screen (relative to screen height)
-        statusBarH = 0.055,
+        statusBarH = 0.050,
     },
     samsung = {
         id           = "samsung",
         displayName  = "Samsung Galaxy S26 Ultra",
-        frameTexture = "textures/phones/samsung_s26ultra_frame.dds",
+        frameTexture = "textures/phones/samsung_s26ultra_frame.png",
         aspectRatio  = 9 / 19.3,
         screen = {
-            x = 0.042,
-            y = 0.025,
-            w = 0.916,
-            h = 0.950,
+            x = 0.066,
+            y = 0.033,
+            w = 0.867,
+            h = 0.934,
         },
         notch = { style = "punch_hole", relX = 0.46, relY = 0.96, relW = 0.08, relH = 0.04 },
-        statusBarH = 0.045,
+        statusBarH = 0.042,
     },
 }
 
