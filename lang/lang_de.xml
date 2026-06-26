@@ -1,11 +1,37 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <l10n>
-    <text name="farmnotify_harvest_ready_title">Erntereif</text>
-    <text name="farmnotify_harvest_ready_msg">%s auf Feld %d kann jetzt geerntet werden.</text>
-    <text name="farmnotify_harvest_overdue_title">Ernte überfällig!</text>
-    <text name="farmnotify_harvest_overdue_msg">Feld %d — Frucht droht zu verwelken!</text>
+    <!-- Harvest -->
+    <text name="farmnotify_harvest_ready_title">Feld %d erntereif</text>
+    <text name="farmnotify_harvest_ready_msg">%s kann jetzt geerntet werden.</text>
+    <text name="farmnotify_harvest_overdue_title">Feld %d — Ernte überfällig!</text>
+    <text name="farmnotify_harvest_overdue_msg">%s verwelkt! Sofort ernten.</text>
+    <!-- Worker -->
+    <text name="farmnotify_worker_done_title">Helfer fertig</text>
+    <text name="farmnotify_worker_done_msg">%s hat die Aufgabe abgeschlossen.</text>
+    <text name="farmnotify_worker_stuck_title">Helfer steckt fest!</text>
+    <text name="farmnotify_worker_stuck_msg">%s konnte Aufgabe nicht beenden.</text>
+    <!-- Fuel -->
+    <text name="farmnotify_fuel_low_title">Tank fast leer</text>
+    <text name="farmnotify_fuel_low_msg">%s — noch %d%% Kraftstoff.</text>
+    <!-- Silo -->
     <text name="farmnotify_silo_full_title">Silo voll</text>
     <text name="farmnotify_silo_full_msg">%s ist voll. Kapazität prüfen.</text>
-    <text name="farmnotify_inbox_title">FarmNotify — Benachrichtigungen</text>
-    <text name="farmnotify_no_notifications">Keine neuen Benachrichtigungen.</text>
+    <!-- Weather -->
+    <text name="farmnotify_weather_rain_title">Regen eingesetzt</text>
+    <text name="farmnotify_weather_rain_msg">Feldarbeiten unterbrechen — Boden wird nass.</text>
+    <text name="farmnotify_weather_storm_title">Sturm-Warnung!</text>
+    <text name="farmnotify_weather_storm_msg">Starker Wind und Regen — Helfer zurückziehen.</text>
+    <!-- UI -->
+    <text name="farmnotify_inbox_title">Benachrichtigungen</text>
+    <text name="farmnotify_no_notifications">Keine Benachrichtigungen.</text>
+    <text name="farmnotify_tap_navigate">Tippen → Feld anzeigen</text>
+    <text name="farmnotify_unread_count">%d ungelesen</text>
+    <!-- Settings -->
+    <text name="farmnotify_settings_title">FarmNotify Einstellungen</text>
+    <text name="farmnotify_settings_phone_model">Handy-Modell</text>
+    <text name="farmnotify_settings_volume">Lautstärke</text>
+    <text name="farmnotify_settings_show_popups">Popups anzeigen</text>
+    <text name="farmnotify_settings_popup_duration">Anzeigedauer (Sekunden)</text>
+    <text name="farmnotify_phone_iphone">iPhone 16 Pro Max</text>
+    <text name="farmnotify_phone_samsung">Samsung Galaxy S26 Ultra</text>
 </l10n>

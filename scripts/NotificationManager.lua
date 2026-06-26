@@ -1,88 +1,169 @@
 -- NotificationManager.lua
--- Creates, queues, and manages lifecycle of notifications
+-- Notification queue, lifecycle management, and savegame persistence
 
 NotificationManager = {}
-NotificationManager.queue = {}
-NotificationManager.MAX_VISIBLE = 3
-NotificationManager.DISPLAY_DURATION = 8000 -- ms
+NotificationManager.MAX_HISTORY  = 50
+NotificationManager.MAX_VISIBLE  = 1  -- one notification shown at a time on phone
 
--- Notification types
 NotificationManager.TYPE = {
-    HARVEST_READY = "harvest_ready",
-    SILO_FULL = "silo_full",
-    MACHINE_ALERT = "machine_alert",
-    WEATHER_WARNING = "weather_warning"
+    HARVEST_READY   = "harvest_ready",
+    HARVEST_OVERDUE = "harvest_overdue",
+    WORKER_DONE     = "worker_done",
+    WORKER_STUCK    = "worker_stuck",
+    FUEL_LOW        = "fuel_low",
+    SILO_FULL       = "silo_full",
+    WEATHER_RAIN    = "weather_rain",
+    WEATHER_STORM   = "weather_storm",
 }
 
--- Icons per type (texture keys, to be loaded in PhoneUI)
-NotificationManager.ICONS = {
-    harvest_ready = "harvest",
-    silo_full = "silo",
-    machine_alert = "machine",
-    weather_warning = "weather"
+-- Cooldown per field+type to avoid spam (ms)
+NotificationManager.COOLDOWNS = {
+    harvest_ready   = 600000,  -- 10 min
+    harvest_overdue = 300000,  -- 5 min
+    worker_done     = 10000,
+    worker_stuck    = 60000,
+    fuel_low        = 120000,
+    silo_full       = 300000,
+    weather_rain    = 600000,
+    weather_storm   = 300000,
 }
+
+NotificationManager.queue    = {}  -- unread / pending display
+NotificationManager.history  = {}  -- all notifications
+NotificationManager.cooldowns = {} -- key: type..fieldId -> last triggered time (g_time ms)
 
 function NotificationManager:init()
-    self.queue = {}
-    print("[FarmNotify] NotificationManager initialized.")
+    self.queue     = {}
+    self.history   = {}
+    self.cooldowns = {}
 end
 
-function NotificationManager:push(notifType, title, message, fieldId)
-    local notif = {
-        id = self:_generateId(),
-        type = notifType,
-        title = title,
-        message = message,
-        fieldId = fieldId or nil,
-        timestamp = g_currentMission and g_currentMission.environment and
-                    g_currentMission.environment.currentMonotonicDay or 0,
-        timeRemaining = self.DISPLAY_DURATION,
-        isNew = true
-    }
-    table.insert(self.queue, 1, notif) -- newest first
-    -- Cap queue length
-    if #self.queue > 20 then
-        table.remove(self.queue, #self.queue)
+-- Push new notification. Returns notification object or nil if cooldown active.
+function NotificationManager:push(notifType, title, message, fieldId, vehicleId)
+    local cooldownKey = notifType .. "_" .. tostring(fieldId or "") .. tostring(vehicleId or "")
+    local now = g_time or 0
+    local cooldown = self.COOLDOWNS[notifType] or 0
+
+    if self.cooldowns[cooldownKey] and (now - self.cooldowns[cooldownKey]) < cooldown then
+        return nil
     end
-    print(string.format("[FarmNotify] Notification: [%s] %s — %s", notifType, title, message))
+
+    self.cooldowns[cooldownKey] = now
+
+    local notif = {
+        id        = self:_newId(),
+        type      = notifType,
+        title     = title,
+        message   = message,
+        fieldId   = fieldId,
+        vehicleId = vehicleId,
+        time      = now,
+        isRead    = false,
+        displayed = false,
+    }
+
+    table.insert(self.queue, notif)
+    table.insert(self.history, 1, notif)
+
+    if #self.history > self.MAX_HISTORY then
+        table.remove(self.history, #self.history)
+    end
+
+    print(string.format("[FarmNotify] [%s] %s — %s", notifType, title, message))
     return notif
 end
 
-function NotificationManager:getVisible()
-    local visible = {}
+-- Returns next notification that hasn't been displayed yet
+function NotificationManager:peekNext()
     for _, n in ipairs(self.queue) do
-        if n.isNew then
-            table.insert(visible, n)
-            if #visible >= self.MAX_VISIBLE then break end
+        if not n.displayed then
+            return n
         end
     end
-    return visible
+    return nil
 end
 
-function NotificationManager:getAll()
-    return self.queue
+function NotificationManager:markDisplayed(id)
+    for i, n in ipairs(self.queue) do
+        if n.id == id then
+            n.displayed = true
+            return
+        end
+    end
 end
 
 function NotificationManager:markRead(id)
-    for _, n in ipairs(self.queue) do
+    for _, n in ipairs(self.history) do
         if n.id == id then
-            n.isNew = false
+            n.isRead = true
+            break
+        end
+    end
+    for i, n in ipairs(self.queue) do
+        if n.id == id then
+            table.remove(self.queue, i)
             break
         end
     end
 end
 
-function NotificationManager:tickVisible(dt)
-    for _, n in ipairs(self.queue) do
-        if n.isNew and n.timeRemaining > 0 then
-            n.timeRemaining = n.timeRemaining - dt
-            if n.timeRemaining <= 0 then
-                n.isNew = false
-            end
-        end
+function NotificationManager:markAllRead()
+    for _, n in ipairs(self.history) do
+        n.isRead = true
+    end
+    self.queue = {}
+end
+
+function NotificationManager:getUnreadCount()
+    local count = 0
+    for _, n in ipairs(self.history) do
+        if not n.isRead then count = count + 1 end
+    end
+    return count
+end
+
+function NotificationManager:getHistory()
+    return self.history
+end
+
+-- Save notification history to savegame XML
+function NotificationManager:saveToXML(xmlFile, baseKey)
+    setXMLInt(xmlFile, baseKey .. "#count", math.min(#self.history, 20))
+    for i, n in ipairs(self.history) do
+        if i > 20 then break end
+        local key = string.format("%s.notification(%d)", baseKey, i - 1)
+        setXMLString(xmlFile, key .. "#id",        n.id)
+        setXMLString(xmlFile, key .. "#type",      n.type)
+        setXMLString(xmlFile, key .. "#title",     n.title)
+        setXMLString(xmlFile, key .. "#message",   n.message)
+        setXMLInt   (xmlFile, key .. "#fieldId",   n.fieldId or -1)
+        setXMLFloat (xmlFile, key .. "#time",      n.time)
+        setXMLBool  (xmlFile, key .. "#isRead",    n.isRead)
     end
 end
 
-function NotificationManager:_generateId()
-    return tostring(math.floor((g_time or 0) * 1000) + math.random(1000))
+function NotificationManager:loadFromXML(xmlFile, baseKey)
+    self.history = {}
+    self.queue   = {}
+    local count = getXMLInt(xmlFile, baseKey .. "#count") or 0
+    for i = 0, count - 1 do
+        local key = string.format("%s.notification(%d)", baseKey, i)
+        local n = {
+            id        = getXMLString(xmlFile, key .. "#id")      or self:_newId(),
+            type      = getXMLString(xmlFile, key .. "#type")    or "unknown",
+            title     = getXMLString(xmlFile, key .. "#title")   or "",
+            message   = getXMLString(xmlFile, key .. "#message") or "",
+            fieldId   = getXMLInt   (xmlFile, key .. "#fieldId"),
+            time      = getXMLFloat (xmlFile, key .. "#time")    or 0,
+            isRead    = getXMLBool  (xmlFile, key .. "#isRead"),
+            displayed = true,
+        }
+        if n.fieldId == -1 then n.fieldId = nil end
+        table.insert(self.history, n)
+    end
+    print(string.format("[FarmNotify] Loaded %d notifications from savegame.", count))
+end
+
+function NotificationManager:_newId()
+    return tostring(math.floor((g_time or 0)) .. "_" .. math.random(100000))
 end

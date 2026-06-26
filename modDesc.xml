@@ -7,16 +7,22 @@
         <de>FarmNotify</de>
     </title>
     <description>
-        <en>In-game mobile phone notification system. Receive WhatsApp-style alerts when fields are harvest-ready, silos are full, or machines need attention.</en>
-        <de>In-Game Handy-Benachrichtigungssystem. Erhalte WhatsApp-ähnliche Meldungen wenn Felder erntereif sind, Silos voll sind oder Maschinen Aufmerksamkeit benötigen.</de>
+        <en>Real smartphone notification system for Farming Simulator 25. Receive live alerts on a rendered iPhone or Samsung Galaxy when fields are harvest-ready, workers finish, fuel runs low, or bad weather is incoming. Choose your phone model in the mod settings.</en>
+        <de>Echtes Smartphone-Benachrichtigungssystem für den Landwirtschafts-Simulator 25. Erhalte Live-Meldungen auf einem gerenderten iPhone oder Samsung Galaxy wenn Felder erntereif sind, Helfer fertig sind, Tank leer wird oder schlechtes Wetter droht. Wähle dein Handy-Modell in den Mod-Einstellungen.</de>
     </description>
-    <iconFilename>icon_farmnotify.dds</iconFilename>
+    <iconFilename>textures/icons/icon_farmnotify.dds</iconFilename>
     <multiplayer supported="true"/>
     <extraSourceFiles>
         <sourceFile filename="scripts/FarmNotify.lua"/>
         <sourceFile filename="scripts/NotificationManager.lua"/>
-        <sourceFile filename="scripts/FieldMonitor.lua"/>
+        <sourceFile filename="scripts/EventDetector.lua"/>
+        <sourceFile filename="scripts/PhoneModel.lua"/>
+        <sourceFile filename="scripts/PhoneAnimator.lua"/>
         <sourceFile filename="scripts/PhoneUI.lua"/>
+        <sourceFile filename="scripts/SoundController.lua"/>
+        <sourceFile filename="scripts/MapNavigator.lua"/>
+        <sourceFile filename="scripts/FarmNotifySettings.lua"/>
     </extraSourceFiles>
     <l10n filenamePrefix="lang/lang"/>
+    <inputBinding filename="inputBinding.xml"/>
 </modDesc>

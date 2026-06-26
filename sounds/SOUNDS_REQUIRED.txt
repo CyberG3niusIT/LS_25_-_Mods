@@ -1,0 +1,22 @@
+NOTIFICATION SOUNDS — REQUIRED WAV FILES
+=========================================
+
+Place the following WAV files in this folder:
+
+  notify_default.wav    — General notification ping (iOS-style or neutral)
+  notify_harvest.wav    — Positive chime for harvest-ready
+  notify_urgent.wav     — Alert sound for overdue harvest / storm
+  notify_done.wav       — Soft completion sound for worker done
+  notify_alert.wav      — Warning sound for worker stuck / fuel low
+  notify_info.wav       — Neutral info sound for silo full
+  notify_weather.wav    — Ambient/weather notification sound
+
+Specs:
+  Format:     WAV (PCM, 16-bit)
+  Sample rate: 44100 Hz
+  Channels:   Mono or Stereo
+  Duration:   0.5 – 2.0 seconds
+  Volume:     Normalized to -3 dBFS peak
+
+NOTE: Missing sound files cause silent notifications.
+The mod will print a warning per missing file to the game log.

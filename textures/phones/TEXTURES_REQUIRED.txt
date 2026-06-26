@@ -1,0 +1,26 @@
+PHONE FRAME TEXTURES — ARTIST ACTION REQUIRED
+=============================================
+
+Two DDS texture files needed here:
+
+  iphone16promax_frame.dds
+      - iPhone 16 Pro Max full front view (portrait)
+      - Include chassis, screen bezel, Dynamic Island, side buttons
+      - Background: transparent (alpha channel) outside phone body
+      - Resolution: 512x1024 or 1024x2048
+      - Screen area: ~88.4% width, ~88.6% height, offset 5.8% from left, 4.2% from bottom
+      - Screen must be FULLY TRANSPARENT so UI can be rendered underneath
+
+  samsung_s26ultra_frame.dds
+      - Samsung Galaxy S26 Ultra full front view (portrait)
+      - Include chassis, screen bezel, punch-hole camera, S Pen slot
+      - Background: transparent (alpha channel) outside phone body
+      - Resolution: 512x1024 or 1024x2048
+      - Screen area: ~91.6% width, ~95.0% height, offset 4.2% from left, 2.5% from bottom
+      - Screen must be FULLY TRANSPARENT so UI can be rendered underneath
+
+DDS Format: DXT5 (with alpha channel)
+Color profile: sRGB
+
+NOTE: Without these files the phone frame will not render.
+The notification UI will still function but without the phone visual.

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<inputBinding>
+    <actionBinding action="FARMNOTIFY_TOGGLE_INBOX">
+        <binding device="KB_MOUSE_DEFAULT" input="KEY_n" axisComponent="+" index="1"
+                 isInverted="false" isTriggerAxis="false"/>
+    </actionBinding>
+    <actionBinding action="FARMNOTIFY_DISMISS">
+        <binding device="KB_MOUSE_DEFAULT" input="KEY_escape" axisComponent="+" index="1"
+                 isInverted="false" isTriggerAxis="false"/>
+    </actionBinding>
+    <actionBinding action="FARMNOTIFY_SCROLL_UP">
+        <binding device="KB_MOUSE_DEFAULT" input="MOUSE_WHEEL_UP" axisComponent="+" index="1"
+                 isInverted="false" isTriggerAxis="false"/>
+    </actionBinding>
+    <actionBinding action="FARMNOTIFY_SCROLL_DOWN">
+        <binding device="KB_MOUSE_DEFAULT" input="MOUSE_WHEEL_DOWN" axisComponent="+" index="1"
+                 isInverted="false" isTriggerAxis="false"/>
+    </actionBinding>
+</inputBinding>
