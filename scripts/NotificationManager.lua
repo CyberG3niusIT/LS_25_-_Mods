@@ -140,6 +140,24 @@ function NotificationManager:saveToXML(xmlFile, baseKey)
         setXMLFloat (xmlFile, key .. "#time",      n.time)
         setXMLBool  (xmlFile, key .. "#isRead",    n.isRead)
     end
+
+    -- Persist active cooldowns so duplicate notifications don't fire on reload.
+    -- g_time resets to ~0 on reload, so we only save the cooldown key (not the
+    -- absolute timestamp). On load, we set the timestamp to `now`, meaning the
+    -- player waits one full cooldown cycle before the event can re-trigger.
+    local now = g_time or 0
+    local activeCooldowns = {}
+    for k, v in pairs(self.cooldowns) do
+        local cooldownType = k:match("^([^_]+)")
+        local maxCooldown  = self.COOLDOWNS[cooldownType] or 0
+        if (now - v) < maxCooldown then
+            table.insert(activeCooldowns, k)
+        end
+    end
+    setXMLInt(xmlFile, baseKey .. ".cooldowns#count", #activeCooldowns)
+    for i, k in ipairs(activeCooldowns) do
+        setXMLString(xmlFile, string.format("%s.cooldown(%d)#key", baseKey, i - 1), k)
+    end
 end
 
 function NotificationManager:loadFromXML(xmlFile, baseKey)
@@ -161,7 +179,20 @@ function NotificationManager:loadFromXML(xmlFile, baseKey)
         if n.fieldId == -1 then n.fieldId = nil end
         table.insert(self.history, n)
     end
-    print(string.format("[FarmNotify] Loaded %d notifications from savegame.", count))
+
+    -- Restore active cooldowns. Timestamp set to `now` so the full cooldown
+    -- period must pass before the same event can trigger again after reload.
+    self.cooldowns = {}
+    local now = g_time or 0
+    local cooldownCount = getXMLInt(xmlFile, baseKey .. ".cooldowns#count") or 0
+    for i = 0, cooldownCount - 1 do
+        local k = getXMLString(xmlFile, string.format("%s.cooldown(%d)#key", baseKey, i))
+        if k ~= nil then
+            self.cooldowns[k] = now
+        end
+    end
+
+    print(string.format("[FarmNotify] Loaded %d notifications, %d cooldowns from savegame.", count, cooldownCount))
 end
 
 function NotificationManager:_newId()
