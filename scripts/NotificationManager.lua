@@ -28,9 +28,10 @@ NotificationManager.COOLDOWNS = {
     weather_storm   = 300000,
 }
 
-NotificationManager.queue    = {}  -- unread / pending display
-NotificationManager.history  = {}  -- all notifications
-NotificationManager.cooldowns = {} -- key: type..fieldId -> last triggered time (g_time ms)
+NotificationManager.queue     = {}  -- unread / pending display
+NotificationManager.history   = {}  -- all notifications
+NotificationManager.cooldowns = {}  -- key: type..fieldId -> last triggered time (g_time ms)
+NotificationManager._idSeq    = 0   -- L02: monotonic counter avoids ID collisions
 
 function NotificationManager:init()
     self.queue     = {}
@@ -177,6 +178,18 @@ function NotificationManager:loadFromXML(xmlFile, baseKey)
             displayed = true,
         }
         if n.fieldId == -1 then n.fieldId = nil end
+
+        -- P2-3: Discard stale fieldIds that no longer exist in the loaded map
+        if n.fieldId ~= nil and g_fieldManager ~= nil then
+            local found = g_fieldManager:getFieldByIndex(n.fieldId) ~= nil
+            if not found and g_fieldManager.getFields then
+                for _, f in pairs(g_fieldManager:getFields()) do
+                    if f:getFieldId() == n.fieldId then found = true; break end
+                end
+            end
+            if not found then n.fieldId = nil end
+        end
+
         table.insert(self.history, n)
     end
 
@@ -196,5 +209,6 @@ function NotificationManager:loadFromXML(xmlFile, baseKey)
 end
 
 function NotificationManager:_newId()
-    return tostring(math.floor((g_time or 0)) .. "_" .. math.random(100000))
+    self._idSeq = (self._idSeq or 0) + 1
+    return string.format("%d_%d", math.floor(g_time or 0), self._idSeq)
 end

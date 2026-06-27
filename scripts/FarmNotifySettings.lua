@@ -78,6 +78,7 @@ function FarmNotifySettings:set(key, value)
         print("[FarmNotify] Unknown setting: " .. tostring(key))
         return
     end
+    if self.current[key] == value then return end  -- L05: skip save if unchanged
     self.current[key] = value
     self:save()
 end

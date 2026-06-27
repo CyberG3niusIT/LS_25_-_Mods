@@ -15,6 +15,10 @@ function MapNavigator:navigateToField(fieldId)
         return
     end
 
+    if g_fieldManager == nil then
+        print("[FarmNotify] MapNavigator: g_fieldManager not available.")
+        return
+    end
     local field = g_fieldManager:getFieldByIndex(fieldId)
     if field == nil then
         -- Some versions use getFields() and iterate

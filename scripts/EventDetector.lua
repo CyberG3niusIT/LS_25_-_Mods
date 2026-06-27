@@ -260,7 +260,7 @@ function EventDetector:_getFuelUnitIndex(vehicle)
     if units == nil then return nil end
     for idx, unit in ipairs(units) do
         local fillType = unit.fillType
-        if fillType == FillType.DIESEL or fillType == FillType.DEF or fillType == FillType.ELECTRICCHARGE then
+        if fillType ~= nil and (fillType == FillType.DIESEL or fillType == FillType.DEF or fillType == FillType.ELECTRICCHARGE) then
             return idx
         end
     end

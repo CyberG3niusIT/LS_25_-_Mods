@@ -195,11 +195,20 @@ function modEventListener:saveSavegame()
     if g_currentMission and g_currentMission.missionInfo then
         local saveDir = g_currentMission.missionInfo.savegameDirectory
         if saveDir then
-            local xmlFile = createXMLFile("FarmNotifySave", saveDir .. "farmnotify.xml", "FarmNotify")
+            -- P2-1: Atomic write — save to .tmp then rename to avoid corrupt
+            -- save data if the game crashes mid-write
+            local tmpPath   = saveDir .. "farmnotify.xml.tmp"
+            local finalPath = saveDir .. "farmnotify.xml"
+            local xmlFile = createXMLFile("FarmNotifySave", tmpPath, "FarmNotify")
             if xmlFile ~= nil then
                 FarmNotify:saveToXML(xmlFile, "FarmNotify")
                 saveXMLFile(xmlFile)
                 deleteXMLFile(xmlFile)
+                os.remove(finalPath)
+                local ok, err = os.rename(tmpPath, finalPath)
+                if not ok then
+                    print("[FarmNotify] Save rename failed: " .. tostring(err))
+                end
             end
         end
     end
