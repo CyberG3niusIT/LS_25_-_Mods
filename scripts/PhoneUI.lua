@@ -169,11 +169,11 @@ function PhoneUI:_drawNotificationScreen(sx, sy, sw, sh, notif)
     -- Tap hint at bottom
     self:_setColor(self.C.timeText)
     if notif.fieldId then
-        self:_drawText(sx + sw * 0.06, sy + sh * 0.10, sh * 0.018, "Tippen → Feld anzeigen")
+        self:_drawText(sx + sw * 0.06, sy + sh * 0.10, sh * 0.018, g_i18n:getText("farmnotify_tap_navigate"))
     end
 
     -- Dismiss hint
-    self:_drawText(sx + sw * 0.06, sy + sh * 0.05, sh * 0.016, "[N] Posteingang öffnen")
+    self:_drawText(sx + sw * 0.06, sy + sh * 0.05, sh * 0.016, g_i18n:getText("farmnotify_inbox_open_hint"))
 
     -- Progress bar (time remaining)
     local elapsed  = FarmNotify.animator.displayTimer
@@ -194,7 +194,7 @@ function PhoneUI:_drawInbox(sx, sy, sw, sh)
     self:_fillRect(sx, sy + sh - headerH, sw, headerH, self.C.headerBg)
     self:_setColor(self.C.accent)
     setTextBold(true)
-    self:_drawText(sx + sw * 0.05, sy + sh - headerH + headerH * 0.32, sh * 0.024, "Benachrichtigungen")
+    self:_drawText(sx + sw * 0.05, sy + sh - headerH + headerH * 0.32, sh * 0.024, g_i18n:getText("farmnotify_inbox_title"))
     setTextBold(false)
 
     -- Unread count
@@ -202,12 +202,12 @@ function PhoneUI:_drawInbox(sx, sy, sw, sh)
     if unread > 0 then
         self:_setColor(self.C.subtext)
         self:_drawText(sx + sw * 0.05, sy + sh - headerH + headerH * 0.08, sh * 0.018,
-            string.format("%d ungelesen", unread))
+            string.format(g_i18n:getText("farmnotify_unread_count"), unread))
     end
 
     -- Close hint
     self:_setColor(self.C.timeText)
-    self:_drawText(sx + sw * 0.60, sy + sh - headerH + headerH * 0.32, sh * 0.016, "[N] Schließen")
+    self:_drawText(sx + sw * 0.60, sy + sh - headerH + headerH * 0.32, sh * 0.016, g_i18n:getText("farmnotify_inbox_close_hint"))
 
     -- Row layout
     local rowH   = sh * 0.13
@@ -218,7 +218,7 @@ function PhoneUI:_drawInbox(sx, sy, sw, sh)
 
     if #history == 0 then
         self:_setColor(self.C.subtext)
-        self:_drawText(sx + sw * 0.1, sy + sh * 0.5, sh * 0.022, "Keine Benachrichtigungen.")
+        self:_drawText(sx + sw * 0.1, sy + sh * 0.5, sh * 0.022, g_i18n:getText("farmnotify_no_notifications"))
         return
     end
 
@@ -263,7 +263,7 @@ function PhoneUI:_drawInbox(sx, sy, sw, sh)
         if notif.fieldId then
             self:_setColor(self.C.timeText)
             self:_drawText(sx + sw * 0.06, rowY + rowH * 0.04, sh * 0.015,
-                "Feld " .. tostring(notif.fieldId))
+                g_i18n:getText("farmnotify_field_badge") .. " " .. tostring(notif.fieldId))
         end
     end
 

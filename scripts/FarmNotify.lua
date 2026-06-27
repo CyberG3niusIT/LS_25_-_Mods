@@ -11,11 +11,26 @@ FarmNotify.settings   = nil
 FarmNotify.animator   = nil
 
 FarmNotify.SAVE_KEY   = "FarmNotify"
+FarmNotify.initialized = false
 
 -- ─── Lifecycle ─────────────────────────────────────────────────────────────
 
 function FarmNotify:init()
     print(string.format("[FarmNotify] v%s starting — %s", self.VERSION, self.modDir))
+
+    -- P0-1: Dedicated server has no rendering or audio APIs
+    if g_dedicatedServer then
+        print("[FarmNotify] Dedicated Server detected — UI and audio disabled.")
+        return
+    end
+
+    -- C01: Guard against double-init on map-change
+    if self.initialized then
+        print("[FarmNotify] Already initialized — cleaning up before reinit.")
+        self:delete()
+    end
+    self.initialized = true
+
     math.randomseed(getTime())
 
     -- Settings (phone model, volume, etc.)
@@ -149,9 +164,12 @@ end
 -- ─── Cleanup ───────────────────────────────────────────────────────────────
 
 function FarmNotify:delete()
-    SoundController:delete()
-    PhoneModel:delete()
-    PhoneUI:delete()
+    if not g_dedicatedServer then
+        SoundController:delete()
+        PhoneModel:delete()
+        PhoneUI:delete()
+    end
+    self.initialized = false
     print("[FarmNotify] Shutdown complete.")
 end
 

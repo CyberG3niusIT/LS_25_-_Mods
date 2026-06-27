@@ -1,40 +1,36 @@
 -- SoundController.lua
--- Plays notification sounds — phone-model-aware (iPhone vs Samsung specific tones)
+-- Plays notification sounds — event-specific WAV primary, optional phone-specific MP3 override
 
 SoundController = {}
 SoundController.modDir  = nil
 SoundController.volume  = 0.8
 SoundController.samples = {}
 
--- Per phone-model: message notification + ringtone
-SoundController.PHONE_SOUNDS = {
-    iphone = {
-        message  = "sounds/iphone_message.mp3",
-        ringtone = "sounds/iphone_ringtone.mp3",
-    },
-    samsung = {
-        message  = "sounds/samsung_message.mp3",
-        ringtone = "sounds/samsung_ringtone.mp3",
-    },
+-- Event-type → dedicated WAV file (all generated, copyright-free)
+SoundController.EVENT_WAV = {
+    harvest_ready   = "sounds/notify_harvest.wav",
+    harvest_overdue = "sounds/notify_urgent.wav",
+    worker_done     = "sounds/notify_done.wav",
+    worker_stuck    = "sounds/notify_alert.wav",
+    fuel_low        = "sounds/notify_alert.wav",
+    silo_full       = "sounds/notify_info.wav",
+    weather_rain    = "sounds/notify_weather.wav",
+    weather_storm   = "sounds/notify_urgent.wav",
+}
+SoundController.DEFAULT_WAV = "sounds/notify_default.wav"
+
+-- Optional phone-specific MP3 overrides — loaded only if files exist on disk
+-- Not shipped in release; users may place their own sounds here
+SoundController.PHONE_SOUNDS_OPTIONAL = {
+    iphone  = { message = "sounds/iphone_message.mp3",  ringtone = "sounds/iphone_ringtone.mp3"  },
+    samsung = { message = "sounds/samsung_message.mp3", ringtone = "sounds/samsung_ringtone.mp3" },
 }
 
--- Event-type → sound category
--- "message" = short notification ping, "ringtone" = long call tone
-SoundController.EVENT_SOUND = {
-    harvest_ready   = "message",
-    harvest_overdue = "ringtone",   -- urgent: full ringtone
-    worker_done     = "message",
-    worker_stuck    = "ringtone",   -- urgent
-    fuel_low        = "message",
-    silo_full       = "message",
-    weather_rain    = "message",
-    weather_storm   = "ringtone",   -- urgent
-}
-
--- Generated WAV fallbacks (used when phone-specific MP3 not loaded)
-SoundController.WAV_FALLBACK = {
-    message  = "sounds/notify_default.wav",
-    ringtone = "sounds/notify_urgent.wav",
+-- Which events count as "ringtone" category for phone-specific override
+SoundController.URGENT_EVENTS = {
+    harvest_overdue = true,
+    worker_stuck    = true,
+    weather_storm   = true,
 }
 
 function SoundController:init(modDir, volume)
@@ -46,19 +42,23 @@ function SoundController:init(modDir, volume)
 end
 
 function SoundController:_loadAll()
-    -- Load phone-specific sounds for each model
-    for modelId, files in pairs(self.PHONE_SOUNDS) do
-        self.samples[modelId] = {}
-        for soundType, file in pairs(files) do
-            local sample = self:_loadFile(modelId .. "_" .. soundType, file)
-            self.samples[modelId][soundType] = sample
+    -- Load per-event WAV files
+    self.samples.event = {}
+    for eventType, file in pairs(self.EVENT_WAV) do
+        if self.samples.event[file] == nil then
+            self.samples.event[file] = self:_loadFile("wav_" .. eventType, file)
         end
     end
+    self.samples.default = self:_loadFile("wav_default", self.DEFAULT_WAV)
 
-    -- Load WAV fallbacks
-    self.samples.fallback = {}
-    for soundType, file in pairs(self.WAV_FALLBACK) do
-        self.samples.fallback[soundType] = self:_loadFile("fallback_" .. soundType, file)
+    -- Try loading optional phone-specific MP3 overrides (silent on failure)
+    self.samples.phone = {}
+    for modelId, files in pairs(self.PHONE_SOUNDS_OPTIONAL) do
+        self.samples.phone[modelId] = {}
+        for soundType, file in pairs(files) do
+            local sample = self:_loadFileOptional(modelId .. "_" .. soundType, file)
+            self.samples.phone[modelId][soundType] = sample
+        end
     end
 end
 
@@ -78,59 +78,73 @@ function SoundController:_loadFile(key, relPath)
     end
 end
 
--- Play sound for given event type, using current phone model
-function SoundController:play(notifType)
-    local currentModel = PhoneModel.current and PhoneModel.current.id or "iphone"
-    local soundType    = self.EVENT_SOUND[notifType] or "message"
-
-    -- Try phone-specific sound first
-    local sample = self.samples[currentModel] and self.samples[currentModel][soundType]
-
-    -- Fallback to generated WAV
-    if sample == nil then
-        sample = self.samples.fallback and self.samples.fallback[soundType]
+function SoundController:_loadFileOptional(key, relPath)
+    local path   = self.modDir .. relPath
+    local sample = createSample(key)
+    if sample == nil then return nil end
+    if loadSample(sample, path, false) then
+        return sample
     end
+    deleteSample(sample)
+    return nil
+end
 
+function SoundController:play(notifType)
+    local sample = self:_resolveSample(notifType)
     if sample == nil then
-        print("[FarmNotify] No sound available for: " .. notifType)
+        print("[FarmNotify] No sound for: " .. tostring(notifType))
         return
     end
-
     -- playSample(sample, loopCount, volume, pitch, startOffset, randomPitch)
     playSample(sample, 0, self.volume, 0, 0, 0)
 end
 
--- Play ringtone explicitly (e.g. for urgent events)
-function SoundController:playRingtone()
+function SoundController:_resolveSample(notifType)
+    -- 1. Try phone-specific override if loaded
     local currentModel = PhoneModel.current and PhoneModel.current.id or "iphone"
-    local sample = self.samples[currentModel] and self.samples[currentModel].ringtone
-                   or self.samples.fallback.ringtone
-    if sample then
-        playSample(sample, 0, self.volume, 0, 0, 0)
-    end
-end
-
-function SoundController:stopAll()
-    for _, modelSounds in pairs(self.samples) do
-        for _, sample in pairs(modelSounds) do
-            if sample ~= nil then
-                stopSample(sample)
-            end
+    local phoneModelSounds = self.samples.phone[currentModel]
+    if phoneModelSounds ~= nil then
+        local soundType = self.URGENT_EVENTS[notifType] and "ringtone" or "message"
+        if phoneModelSounds[soundType] ~= nil then
+            return phoneModelSounds[soundType]
         end
     end
+
+    -- 2. Event-specific WAV (primary)
+    local wavFile = self.EVENT_WAV[notifType]
+    if wavFile and self.samples.event[wavFile] then
+        return self.samples.event[wavFile]
+    end
+
+    -- 3. Generic default WAV
+    return self.samples.default
 end
 
 function SoundController:setVolume(vol)
     self.volume = math.max(0.0, math.min(1.0, vol))
 end
 
+function SoundController:stopAll()
+    for _, sample in pairs(self.samples.event or {}) do
+        if sample ~= nil then stopSample(sample) end
+    end
+    if self.samples.default then stopSample(self.samples.default) end
+    for _, modelSounds in pairs(self.samples.phone or {}) do
+        for _, sample in pairs(modelSounds) do
+            if sample ~= nil then stopSample(sample) end
+        end
+    end
+end
+
 function SoundController:delete()
     self:stopAll()
-    for _, modelSounds in pairs(self.samples) do
+    for _, sample in pairs(self.samples.event or {}) do
+        if sample ~= nil then deleteSample(sample) end
+    end
+    if self.samples.default then deleteSample(self.samples.default) end
+    for _, modelSounds in pairs(self.samples.phone or {}) do
         for _, sample in pairs(modelSounds) do
-            if sample ~= nil then
-                deleteSample(sample)
-            end
+            if sample ~= nil then deleteSample(sample) end
         end
     end
     self.samples = {}

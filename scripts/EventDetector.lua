@@ -66,8 +66,8 @@ function EventDetector:checkFields()
                 state.notifiedOverdue = false
                 NotificationManager:push(
                     NotificationManager.TYPE.HARVEST_READY,
-                    string.format("Feld %d erntereif", fieldId),
-                    string.format("%s kann jetzt geerntet werden.", fruitName),
+                    string.format(g_i18n:getText("farmnotify_harvest_ready_title"), fieldId),
+                    string.format(g_i18n:getText("farmnotify_harvest_ready_msg"), fruitName),
                     fieldId
                 )
             end
@@ -77,8 +77,8 @@ function EventDetector:checkFields()
                 state.notifiedOverdue = true
                 NotificationManager:push(
                     NotificationManager.TYPE.HARVEST_OVERDUE,
-                    string.format("Feld %d — Ernte überfällig!", fieldId),
-                    string.format("%s verwelkt! Sofort ernten.", fruitName),
+                    string.format(g_i18n:getText("farmnotify_harvest_overdue_title"), fieldId),
+                    string.format(g_i18n:getText("farmnotify_harvest_overdue_msg"), fruitName),
                     fieldId
                 )
             end
@@ -123,8 +123,8 @@ function EventDetector:checkVehicles()
                         local vName = vehicle:getFullName() or "Fahrzeug"
                         NotificationManager:push(
                             NotificationManager.TYPE.FUEL_LOW,
-                            "Tank fast leer",
-                            string.format("%s — noch %d%% Kraftstoff.", vName, math.floor(pct * 100)),
+                            g_i18n:getText("farmnotify_fuel_low_title"),
+                            string.format(g_i18n:getText("farmnotify_fuel_low_msg"), vName, math.floor(pct * 100)),
                             nil, name
                         )
                     end
@@ -146,15 +146,15 @@ function EventDetector:checkVehicles()
                 if state.workerFinishedNormally then
                     NotificationManager:push(
                         NotificationManager.TYPE.WORKER_DONE,
-                        "Helfer fertig",
-                        string.format("%s hat die Aufgabe abgeschlossen.", vName),
+                        g_i18n:getText("farmnotify_worker_done_title"),
+                        string.format(g_i18n:getText("farmnotify_worker_done_msg"), vName),
                         state.workerFieldId, name
                     )
                 else
                     NotificationManager:push(
                         NotificationManager.TYPE.WORKER_STUCK,
-                        "Helfer steckt fest!",
-                        string.format("%s konnte Aufgabe nicht beenden.", vName),
+                        g_i18n:getText("farmnotify_worker_stuck_title"),
+                        string.format(g_i18n:getText("farmnotify_worker_stuck_msg"), vName),
                         state.workerFieldId, name
                     )
                 end
@@ -202,8 +202,8 @@ function EventDetector:checkWeather()
     if isRaining and not self.weatherState.wasRaining then
         NotificationManager:push(
             NotificationManager.TYPE.WEATHER_RAIN,
-            "Regen eingesetzt",
-            "Feldarbeiten unterbrechen — Boden wird nass.",
+            g_i18n:getText("farmnotify_weather_rain_title"),
+            g_i18n:getText("farmnotify_weather_rain_msg"),
             nil
         )
     end
@@ -211,8 +211,8 @@ function EventDetector:checkWeather()
     if isStorming and not self.weatherState.wasStorming then
         NotificationManager:push(
             NotificationManager.TYPE.WEATHER_STORM,
-            "Sturm-Warnung!",
-            "Starker Wind und Regen — Helfer zurückziehen.",
+            g_i18n:getText("farmnotify_weather_storm_title"),
+            g_i18n:getText("farmnotify_weather_storm_msg"),
             nil
         )
     end

@@ -24,8 +24,11 @@
     <!-- UI -->
     <text name="farmnotify_inbox_title">Notifications</text>
     <text name="farmnotify_no_notifications">No notifications.</text>
-    <text name="farmnotify_tap_navigate">Tap → Show field</text>
+    <text name="farmnotify_tap_navigate">Tap: Show field</text>
     <text name="farmnotify_unread_count">%d unread</text>
+    <text name="farmnotify_inbox_open_hint">[N] Inbox</text>
+    <text name="farmnotify_inbox_close_hint">[N] Close</text>
+    <text name="farmnotify_field_badge">Field</text>
     <!-- Settings -->
     <text name="farmnotify_settings_title">FarmNotify Settings</text>
     <text name="farmnotify_settings_phone_model">Phone model</text>
