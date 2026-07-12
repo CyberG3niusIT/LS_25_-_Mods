@@ -1,13 +1,14 @@
 -- EventDetector.lua
--- Detects all in-game events and pushes notifications
+-- Detects supported in-game events and pushes local-farm notifications.
 
 EventDetector = {}
 EventDetector.FIELD_CHECK_INTERVAL   = 30000  -- 30s
 EventDetector.VEHICLE_CHECK_INTERVAL = 15000  -- 15s
 EventDetector.WEATHER_CHECK_INTERVAL = 60000  -- 60s
 EventDetector.SILO_CHECK_INTERVAL    = 30000  -- 30s
-EventDetector.FUEL_THRESHOLD         = 0.15   -- 15% tank
-EventDetector.SILO_FULL_THRESHOLD    = 0.90   -- 90% = silo full
+EventDetector.FUEL_THRESHOLD         = 0.15   -- 15% propellant remaining
+EventDetector.SILO_FULL_THRESHOLD    = 0.999  -- effectively full (matches the notification text)
+EventDetector.SILO_RESET_THRESHOLD   = 0.95
 
 EventDetector.fieldTimer   = 0
 EventDetector.vehicleTimer = 0
@@ -15,20 +16,36 @@ EventDetector.weatherTimer = 0
 EventDetector.siloTimer    = 0
 
 -- State tracking
-EventDetector.fieldStates   = {}  -- fieldId -> { growthState, notifiedReady, notifiedOverdue }
-EventDetector.vehicleStates = {}  -- vehicleName -> { wasWorking, lastFuelPct }
-EventDetector.weatherState  = { wasRaining = false, wasStorming = false }
-EventDetector.siloStates    = {}  -- siloKey -> { notifiedFull, lastFillPct }
+EventDetector.fieldStates  = {} -- fieldId -> {growthState, notifiedReady, notifiedOverdue}
+EventDetector.vehicleStates = {} -- vehicle key -> {lastFuelPct}
+EventDetector.weatherState = { initialized = false, wasRaining = false }
+EventDetector.siloStates   = {} -- silo key -> {notifiedFull, lastFillPct}
+EventDetector.activeAIJobs = {} -- job -> stable data captured when the job starts
 
 function EventDetector:init()
     self.fieldStates   = {}
     self.vehicleStates = {}
-    self.weatherState  = { wasRaining = false, wasStorming = false }
+    self.weatherState  = { initialized = false, wasRaining = false }
     self.siloStates    = {}
+    self.activeAIJobs  = {}
     self.fieldTimer    = self.FIELD_CHECK_INTERVAL
     self.vehicleTimer  = self.VEHICLE_CHECK_INTERVAL
     self.weatherTimer  = self.WEATHER_CHECK_INTERVAL
     self.siloTimer     = self.SILO_CHECK_INTERVAL
+
+    -- AI job stop messages carry the real completion reason. Polling
+    -- getIsAIActive() cannot distinguish success, an error, and a user stop.
+    if g_messageCenter ~= nil then
+        g_messageCenter:unsubscribeAll(self)
+
+        if MessageType.AI_JOB_STARTED ~= nil then
+            g_messageCenter:subscribe(MessageType.AI_JOB_STARTED, self.onAIJobStarted, self)
+        end
+        if MessageType.AI_JOB_STOPPED ~= nil then
+            g_messageCenter:subscribe(MessageType.AI_JOB_STOPPED, self.onAIJobStopped, self)
+        end
+    end
+
     print("[FarmNotify] EventDetector initialized.")
 end
 
@@ -56,283 +73,462 @@ function EventDetector:update(dt)
     end
 end
 
--- ─── Field Events ──────────────────────────────────────────────────────────
+-- Field events -------------------------------------------------------------
 
 function EventDetector:checkFields()
-    if g_fieldManager == nil then return end
+    local fields = g_fieldManager and g_fieldManager.fields
     local myFarmId = self:_getLocalFarmId()
+    if fields == nil or myFarmId == nil then return end
 
-    for _, field in pairs(g_fieldManager:getFields()) do
-        -- In multiplayer: only process fields owned by the local player's farm
-        local fieldFarmId = field.getOwnerFarmId and field:getOwnerFarmId()
-        if myFarmId == nil or fieldFarmId == nil or fieldFarmId == myFarmId then
-            local fieldId   = field:getFieldId()
-            local fruitType = field:getFruitType()
+    for _, field in pairs(fields) do
+        local fieldId = self:_getFieldId(field)
 
-            if fruitType ~= nil and fruitType ~= FruitType.UNKNOWN then
-                local growthState = field:getFruitGrowthState()
-                local maxState    = field:getFruitMaxGrowthState()
-                local fruitName   = self:_getFruitName(fruitType)
-                local state       = self.fieldStates[fieldId] or {}
-
-                -- Harvest ready
-                if growthState >= maxState and not state.notifiedReady then
-                    state.notifiedReady   = true
-                    state.notifiedOverdue = false
-                    NotificationManager:push(
-                        NotificationManager.TYPE.HARVEST_READY,
-                        string.format(g_i18n:getText("farmnotify_harvest_ready_title"), fieldId),
-                        string.format(g_i18n:getText("farmnotify_harvest_ready_msg"), fruitName),
-                        fieldId
-                    )
-                end
-
-                -- Harvest overdue (growth > max+1 = wilting in LS25)
-                if growthState > maxState + 1 and not state.notifiedOverdue then
-                    state.notifiedOverdue = true
-                    NotificationManager:push(
-                        NotificationManager.TYPE.HARVEST_OVERDUE,
-                        string.format(g_i18n:getText("farmnotify_harvest_overdue_title"), fieldId),
-                        string.format(g_i18n:getText("farmnotify_harvest_overdue_msg"), fruitName),
-                        fieldId
-                    )
-                end
-
-                -- Reset if replanted
-                if growthState < maxState - 1 then
-                    state.notifiedReady   = false
-                    state.notifiedOverdue = false
-                end
-
-                state.growthState         = growthState
-                self.fieldStates[fieldId] = state
+        if fieldId ~= nil and self:_isFieldOwnedByFarm(field, myFarmId) then
+            local fieldState = nil
+            if field.getFieldState ~= nil then
+                fieldState = field:getFieldState()
             else
-                -- Field empty — reset
-                if self.fieldStates[fieldId] then
-                    self.fieldStates[fieldId].notifiedReady   = false
-                    self.fieldStates[fieldId].notifiedOverdue = false
-                end
+                fieldState = field.fieldState
             end
-        end
-    end
-end
 
--- ─── Vehicle / Worker Events ───────────────────────────────────────────────
+            if fieldState ~= nil and fieldState.isValid then
+                local fruitTypeIndex = fieldState.fruitTypeIndex
+                local growthState = fieldState.growthState
+                local fruitTypeDesc = g_fruitTypeManager and g_fruitTypeManager:getFruitTypeByIndex(fruitTypeIndex)
+                local state = self.fieldStates[fieldId] or {}
 
-function EventDetector:checkVehicles()
-    if g_currentMission == nil or g_currentMission.vehicles == nil then return end
-    local myFarmId = self:_getLocalFarmId()
+                if fruitTypeDesc ~= nil and fruitTypeIndex ~= FruitType.UNKNOWN and growthState ~= nil then
+                    local isWithered = fruitTypeDesc:getIsWithered(growthState)
+                    local isHarvestReady = fruitTypeDesc:getIsHarvestReady(growthState)
+                    local fruitName = self:_getFruitName(fruitTypeIndex)
 
-    for _, vehicle in pairs(g_currentMission.vehicles) do
-        -- In multiplayer: only process vehicles owned by the local player's farm
-        local vFarmId = vehicle.ownerFarmId or (vehicle.getOwnerFarmId and vehicle:getOwnerFarmId())
-        if myFarmId == nil or vFarmId == nil or vFarmId == myFarmId then
-            local name = tostring(vehicle)
-
-            -- Fuel check (vehicles with fillUnits)
-            if vehicle.getFillUnitFillLevel and vehicle.getFillUnitCapacity then
-                local fuelUnitIdx = self:_getFuelUnitIndex(vehicle)
-                if fuelUnitIdx ~= nil then
-                    local level    = vehicle:getFillUnitFillLevel(fuelUnitIdx)
-                    local capacity = vehicle:getFillUnitCapacity(fuelUnitIdx)
-                    if capacity > 0 then
-                        local pct = level / capacity
-                        local state = self.vehicleStates[name] or {}
-
-                        if pct <= self.FUEL_THRESHOLD and (state.lastFuelPct == nil or state.lastFuelPct > self.FUEL_THRESHOLD) then
-                            local vName = vehicle:getFullName() or "Fahrzeug"
+                    -- A withered state is no longer harvest-ready. Test it first
+                    -- so one scan can never emit both notifications.
+                    if isWithered then
+                        if not state.notifiedOverdue then
+                            state.notifiedOverdue = true
+                            state.notifiedReady = false
                             NotificationManager:push(
-                                NotificationManager.TYPE.FUEL_LOW,
-                                g_i18n:getText("farmnotify_fuel_low_title"),
-                                string.format(g_i18n:getText("farmnotify_fuel_low_msg"), vName, math.floor(pct * 100)),
-                                nil, name
+                                NotificationManager.TYPE.HARVEST_OVERDUE,
+                                string.format(g_i18n:getText("farmnotify_harvest_overdue_title"), fieldId),
+                                string.format(g_i18n:getText("farmnotify_harvest_overdue_msg"), fruitName),
+                                fieldId
                             )
                         end
-                        state.lastFuelPct = pct
-                        self.vehicleStates[name] = state
-                    end
-                end
-            end
-
-            -- Worker done / stuck
-            if vehicle.getIsAIActive then
-                local state = self.vehicleStates[name] or {}
-                local isWorking = vehicle:getIsAIActive()
-
-                if state.wasWorking and not isWorking then
-                    local vName = vehicle:getFullName() or "Helfer"
-                    if state.workerFinishedNormally then
-                        NotificationManager:push(
-                            NotificationManager.TYPE.WORKER_DONE,
-                            g_i18n:getText("farmnotify_worker_done_title"),
-                            string.format(g_i18n:getText("farmnotify_worker_done_msg"), vName),
-                            state.workerFieldId, name
-                        )
+                    elseif isHarvestReady then
+                        if not state.notifiedReady then
+                            state.notifiedReady = true
+                            state.notifiedOverdue = false
+                            NotificationManager:push(
+                                NotificationManager.TYPE.HARVEST_READY,
+                                string.format(g_i18n:getText("farmnotify_harvest_ready_title"), fieldId),
+                                string.format(g_i18n:getText("farmnotify_harvest_ready_msg"), fruitName),
+                                fieldId
+                            )
+                        end
                     else
-                        NotificationManager:push(
-                            NotificationManager.TYPE.WORKER_STUCK,
-                            g_i18n:getText("farmnotify_worker_stuck_title"),
-                            string.format(g_i18n:getText("farmnotify_worker_stuck_msg"), vName),
-                            state.workerFieldId, name
-                        )
+                        -- Cut, growing, or replanted: arm the next crop cycle.
+                        state.notifiedReady = false
+                        state.notifiedOverdue = false
                     end
+
+                    state.growthState = growthState
+                else
+                    state.notifiedReady = false
+                    state.notifiedOverdue = false
+                    state.growthState = nil
                 end
 
-                if isWorking and not state.wasWorking then
-                    state.workerFieldId = nil
-                    if vehicle.aiFieldWorker and vehicle.aiFieldWorker.lastFieldId then
-                        state.workerFieldId = vehicle.aiFieldWorker.lastFieldId
-                    end
-                end
-
-                state.wasWorking = isWorking
-                self.vehicleStates[name] = state
+                self.fieldStates[fieldId] = state
             end
         end
     end
 end
 
--- ─── Weather Events ────────────────────────────────────────────────────────
+-- Vehicle fuel events ------------------------------------------------------
 
-function EventDetector:checkWeather()
-    local env = g_currentMission and g_currentMission.environment
-    if env == nil then return end
+function EventDetector:checkVehicles()
+    local mission = g_currentMission
+    local myFarmId = self:_getLocalFarmId()
+    if mission == nil or mission.vehicles == nil or myFarmId == nil then return end
 
-    -- LS25 weather API: env.weather
-    local weather = env.weather
-    if weather == nil then return end
+    local seenVehicleKeys = {}
 
-    -- Rain check
-    local isRaining = false
-    local isStorming = false
+    for _, vehicle in pairs(mission.vehicles) do
+        local vehicleFarmId = vehicle.getOwnerFarmId and vehicle:getOwnerFarmId()
 
-    if weather.getIsRaining then
-        isRaining = weather:getIsRaining()
-    elseif weather.isRaining ~= nil then
-        isRaining = weather.isRaining
+        if vehicleFarmId == myFarmId then
+            local vehicleKey = tostring(vehicle)
+            seenVehicleKeys[vehicleKey] = true
+
+            local fuelPct = self:_getFuelPercentage(vehicle)
+            if fuelPct ~= nil then
+                local state = self.vehicleStates[vehicleKey] or {}
+
+                if fuelPct <= self.FUEL_THRESHOLD
+                    and (state.lastFuelPct == nil or state.lastFuelPct > self.FUEL_THRESHOLD) then
+                    local vehicleName = self:_getVehicleName(vehicle)
+                    NotificationManager:push(
+                        NotificationManager.TYPE.FUEL_LOW,
+                        g_i18n:getText("farmnotify_fuel_low_title"),
+                        string.format(g_i18n:getText("farmnotify_fuel_low_msg"), vehicleName, math.floor(fuelPct * 100)),
+                        nil,
+                        vehicleKey
+                    )
+                end
+
+                state.lastFuelPct = fuelPct
+                self.vehicleStates[vehicleKey] = state
+            end
+        end
     end
 
-    -- Storm / thunder (strong wind + rain)
-    if env.windSpeed and env.windSpeed > 15 and isRaining then
-        isStorming = true
+    -- Do not retain deleted vehicles forever during a long session.
+    for vehicleKey, _ in pairs(self.vehicleStates) do
+        if not seenVehicleKeys[vehicleKey] then
+            self.vehicleStates[vehicleKey] = nil
+        end
+    end
+end
+
+-- AI worker events ---------------------------------------------------------
+
+function EventDetector:onAIJobStarted(job, startedFarmId)
+    if job == nil or startedFarmId ~= self:_getLocalFarmId() then return end
+
+    local vehicle = self:_getAIJobVehicle(job)
+    self.activeAIJobs[job] = {
+        farmId = startedFarmId,
+        vehicle = vehicle,
+        vehicleName = self:_getVehicleName(vehicle),
+        vehicleKey = vehicle and tostring(vehicle) or tostring(job),
+        fieldId = self:_getFieldIdAtVehicle(vehicle)
+    }
+end
+
+function EventDetector:onAIJobStopped(job, aiMessage)
+    if job == nil then return end
+
+    local tracked = self.activeAIJobs[job]
+    self.activeAIJobs[job] = nil
+
+    local farmId = tracked and tracked.farmId or job.startedFarmId
+    if farmId == nil or farmId ~= self:_getLocalFarmId() then return end
+
+    local vehicle = (tracked and tracked.vehicle) or self:_getAIJobVehicle(job)
+    local vehicleName = (tracked and tracked.vehicleName) or self:_getVehicleName(vehicle)
+    local vehicleKey = (tracked and tracked.vehicleKey) or (vehicle and tostring(vehicle)) or tostring(job)
+    local fieldId = (tracked and tracked.fieldId) or self:_getFieldIdAtVehicle(vehicle)
+
+    local finishedNormally = aiMessage ~= nil
+        and AIMessageSuccessFinishedJob ~= nil
+        and aiMessage.isa ~= nil
+        and aiMessage:isa(AIMessageSuccessFinishedJob)
+
+    local failed = aiMessage ~= nil
+        and aiMessage.getType ~= nil
+        and AIMessageType ~= nil
+        and aiMessage:getType() == AIMessageType.ERROR
+
+    if finishedNormally then
+        NotificationManager:push(
+            NotificationManager.TYPE.WORKER_DONE,
+            g_i18n:getText("farmnotify_worker_done_title"),
+            string.format(g_i18n:getText("farmnotify_worker_done_msg"), vehicleName),
+            fieldId,
+            vehicleKey
+        )
+    elseif failed then
+        NotificationManager:push(
+            NotificationManager.TYPE.WORKER_STUCK,
+            g_i18n:getText("farmnotify_worker_stuck_title"),
+            string.format(g_i18n:getText("farmnotify_worker_stuck_msg"), vehicleName),
+            fieldId,
+            vehicleKey
+        )
+    end
+    -- Successful user stops and other informational endings are intentionally
+    -- ignored: they are neither a completed task nor a failure.
+end
+
+-- Weather events -----------------------------------------------------------
+
+function EventDetector:checkWeather()
+    local environment = g_currentMission and g_currentMission.environment
+    local weather = environment and environment.weather
+    if weather == nil or weather.getIsRaining == nil then return end
+
+    local isRaining = weather:getIsRaining()
+
+    -- The first scan establishes a baseline. Loading a save while it already
+    -- rains is not the same as rain starting during this session.
+    if not self.weatherState.initialized then
+        self.weatherState.initialized = true
+        self.weatherState.wasRaining = isRaining
+        return
     end
 
     if isRaining and not self.weatherState.wasRaining then
+        local title = g_i18n:getText("farmnotify_weather_rain_title")
         NotificationManager:push(
             NotificationManager.TYPE.WEATHER_RAIN,
-            g_i18n:getText("farmnotify_weather_rain_title"),
-            g_i18n:getText("farmnotify_weather_rain_msg"),
+            title,
+            title,
             nil
         )
     end
 
-    if isStorming and not self.weatherState.wasStorming then
-        NotificationManager:push(
-            NotificationManager.TYPE.WEATHER_STORM,
-            g_i18n:getText("farmnotify_weather_storm_title"),
-            g_i18n:getText("farmnotify_weather_storm_msg"),
-            nil
-        )
-    end
+    self.weatherState.wasRaining = isRaining
 
-    self.weatherState.wasRaining  = isRaining
-    self.weatherState.wasStorming = isStorming
+    -- FS25 exposes a reliable rain predicate here, but no verified generic
+    -- "storm" predicate. Do not invent storms from an arbitrary wind value.
 end
 
--- ─── Helpers ──────────────────────────────────────────────────────────────
+-- Silo events --------------------------------------------------------------
+
+function EventDetector:checkSilos()
+    local mission = g_currentMission
+    local placeableSystem = mission and mission.placeableSystem
+    local myFarmId = self:_getLocalFarmId()
+    if placeableSystem == nil or placeableSystem.getPlaceables == nil or myFarmId == nil then return end
+
+    local placeables = placeableSystem:getPlaceables()
+    if placeables == nil then return end
+
+    for _, placeable in pairs(placeables) do
+        local silo = placeable.spec_silo
+
+        if silo ~= nil and silo.storages ~= nil then
+            local placeableFarmId = placeable.getOwnerFarmId and placeable:getOwnerFarmId()
+            local isRelevantSilo = silo.storagePerFarm or placeableFarmId == myFarmId
+
+            if isRelevantSilo then
+                local totalLevel = 0
+                local totalCapacity = 0
+
+                for _, storage in ipairs(silo.storages) do
+                    local storageFarmId = nil
+                    if storage.getOwnerFarmId ~= nil then
+                        storageFarmId = storage:getOwnerFarmId()
+                    else
+                        storageFarmId = storage.ownerFarmId
+                    end
+
+                    if not silo.storagePerFarm or storageFarmId == myFarmId then
+                        local level, capacity = self:_getStorageUsage(storage)
+                        totalLevel = totalLevel + level
+                        totalCapacity = totalCapacity + capacity
+                    end
+                end
+
+                if totalCapacity > 0 then
+                    local fillPct = math.min(totalLevel / totalCapacity, 1)
+                    local siloKey = tostring(placeable) .. "|" .. tostring(myFarmId)
+                    local state = self.siloStates[siloKey] or {}
+
+                    if fillPct >= self.SILO_FULL_THRESHOLD and not state.notifiedFull then
+                        state.notifiedFull = true
+                        local siloName = nil
+                        if placeable.getName ~= nil then
+                            siloName = placeable:getName()
+                        end
+                        if siloName == nil or siloName == "" then
+                            siloName = g_i18n:getText("farmnotify_silo_full_title")
+                        end
+
+                        NotificationManager:push(
+                            NotificationManager.TYPE.SILO_FULL,
+                            g_i18n:getText("farmnotify_silo_full_title"),
+                            string.format(g_i18n:getText("farmnotify_silo_full_msg"), siloName),
+                            nil
+                        )
+                    elseif fillPct < self.SILO_RESET_THRESHOLD then
+                        state.notifiedFull = false
+                    end
+
+                    state.lastFillPct = fillPct
+                    self.siloStates[siloKey] = state
+                end
+            end
+        end
+    end
+end
+
+-- Helpers ------------------------------------------------------------------
+
+function EventDetector:_getLocalFarmId()
+    local mission = g_currentMission
+    if mission == nil then return nil end
+
+    local farmId = nil
+    if mission.getFarmId ~= nil then
+        farmId = mission:getFarmId()
+    elseif g_localPlayer ~= nil then
+        farmId = g_localPlayer.farmId
+    end
+
+    if farmId == nil or farmId <= 0 then return nil end
+    return farmId
+end
+
+function EventDetector:_getFieldId(field)
+    if field == nil then return nil end
+    if field.getId ~= nil then return field:getId() end
+    return field.fieldId
+end
+
+function EventDetector:_isFieldOwnedByFarm(field, farmId)
+    if field == nil or farmId == nil or g_farmlandManager == nil then return false end
+
+    local farmland = nil
+    if field.getFarmland ~= nil then
+        farmland = field:getFarmland()
+    else
+        farmland = field.farmland
+    end
+
+    local farmlandId = farmland and farmland.id
+    if farmlandId == nil or g_farmlandManager.getFarmlandOwner == nil then return false end
+    return g_farmlandManager:getFarmlandOwner(farmlandId) == farmId
+end
 
 function EventDetector:_getFruitName(fruitTypeIndex)
-    if g_fruitTypeManager == nil then return "Unbekannte Frucht" end
+    if g_fruitTypeManager == nil then return "Unknown crop" end
     local fruitDesc = g_fruitTypeManager:getFruitTypeByIndex(fruitTypeIndex)
-    if fruitDesc == nil then return "Unbekannte Frucht" end
-    if fruitDesc.fillType and g_fillTypeManager then
+    if fruitDesc == nil then return "Unknown crop" end
+
+    if fruitDesc.fillType ~= nil and g_fillTypeManager ~= nil then
         local fillDesc = g_fillTypeManager:getFillTypeByIndex(fruitDesc.fillType)
-        if fillDesc and fillDesc.title then
+        if fillDesc ~= nil and fillDesc.title ~= nil then
             return fillDesc.title
         end
     end
-    return fruitDesc.name or "Frucht"
+
+    return fruitDesc.name or "Crop"
 end
 
-function EventDetector:_getFuelUnitIndex(vehicle)
-    if vehicle.getFillUnits == nil then return nil end
-    local units = vehicle:getFillUnits()
-    if units == nil then return nil end
-    for idx, unit in ipairs(units) do
-        local fillType = unit.fillType
-        if fillType ~= nil and (fillType == FillType.DIESEL or fillType == FillType.DEF or fillType == FillType.ELECTRICCHARGE) then
-            return idx
+function EventDetector:_getVehicleName(vehicle)
+    if vehicle ~= nil and vehicle.getFullName ~= nil then
+        local name = vehicle:getFullName()
+        if name ~= nil and name ~= "" then return name end
+    end
+    return "Vehicle"
+end
+
+function EventDetector:_getFuelPercentage(vehicle)
+    if vehicle == nil
+        or vehicle.getConsumerFillUnitIndex == nil
+        or vehicle.getFillUnitFillLevelPercentage == nil then
+        return nil
+    end
+
+    local propellantTypes = {}
+    if FillType ~= nil then
+        if FillType.DIESEL ~= nil then table.insert(propellantTypes, FillType.DIESEL) end
+        if FillType.ELECTRICCHARGE ~= nil then table.insert(propellantTypes, FillType.ELECTRICCHARGE) end
+        if FillType.METHANE ~= nil then table.insert(propellantTypes, FillType.METHANE) end
+    end
+
+    local lowestPct = nil
+    local checkedUnits = {}
+
+    for _, fillTypeIndex in ipairs(propellantTypes) do
+        local fillUnitIndex = vehicle:getConsumerFillUnitIndex(fillTypeIndex)
+        if fillUnitIndex ~= nil and not checkedUnits[fillUnitIndex] then
+            checkedUnits[fillUnitIndex] = true
+            local pct = vehicle:getFillUnitFillLevelPercentage(fillUnitIndex)
+            if pct ~= nil and (lowestPct == nil or pct < lowestPct) then
+                lowestPct = pct
+            end
         end
     end
+
+    return lowestPct
+end
+
+function EventDetector:_getAIJobVehicle(job)
+    local parameter = job and job.vehicleParameter
+    if parameter ~= nil and parameter.getVehicle ~= nil then
+        return parameter:getVehicle()
+    end
+
+    if job ~= nil and job.getNamedParameter ~= nil then
+        parameter = job:getNamedParameter("vehicle")
+        if parameter ~= nil and parameter.getVehicle ~= nil then
+            return parameter:getVehicle()
+        end
+    end
+
     return nil
 end
 
--- Returns the local player's farm ID, or nil in singleplayer / when unavailable
-function EventDetector:_getLocalFarmId()
-    if g_currentMission == nil then return nil end
-    local player = g_currentMission.player
-    if player == nil then return nil end
-    return player.farmId
+function EventDetector:_getFieldIdAtVehicle(vehicle)
+    if vehicle == nil or vehicle.rootNode == nil
+        or g_farmlandManager == nil or g_fieldManager == nil then
+        return nil
+    end
+
+    local ok, x, _, z = pcall(getWorldTranslation, vehicle.rootNode)
+    if not ok or x == nil then return nil end
+
+    local farmlandId = g_farmlandManager:getFarmlandIdAtWorldPosition(x, z)
+    local mapping = g_fieldManager.farmlandIdFieldMapping
+    local field = mapping and mapping[farmlandId]
+    return self:_getFieldId(field)
 end
 
--- ─── Silo Events ──────────────────────────────────────────────────────────
+function EventDetector:_getStorageUsage(storage)
+    if storage == nil or storage.getFillLevels == nil then return 0, 0 end
 
-function EventDetector:checkSilos()
-    if g_currentMission == nil then return end
-    local ps = g_currentMission.placeableSystem
-    if ps == nil then return end
+    local fillLevels = storage:getFillLevels()
+    if fillLevels == nil then return 0, 0 end
 
-    for _, placeable in pairs(ps:getPlaceables()) do
-        local storage = placeable.spec_storage
-        if storage ~= nil then
-            local siloKey = tostring(placeable)
-            local state   = self.siloStates[siloKey] or {}
+    local totalLevel = 0
+    local totalCapacity = 0
 
-            local totalLevel    = 0
-            local totalCapacity = 0
-            local fillTypeName  = nil
+    if storage.supportsMultipleFillTypes then
+        local sharedLevel = 0
+        local sharedFillType = nil
 
-            if storage.storages then
-                for _, s in pairs(storage.storages) do
-                    if s.fillLevels and s.capacities then
-                        for fillTypeIdx, lvl in pairs(s.fillLevels) do
-                            local cap = s.capacities[fillTypeIdx] or 0
-                            if cap > 0 and lvl > 0 then
-                                totalLevel    = totalLevel    + lvl
-                                totalCapacity = totalCapacity + cap
-                                if fillTypeName == nil and g_fillTypeManager then
-                                    local ft = g_fillTypeManager:getFillTypeByIndex(fillTypeIdx)
-                                    if ft then fillTypeName = ft.title or ft.name end
-                                end
-                            end
-                        end
-                    end
-                end
+        for fillTypeIndex, fillLevel in pairs(fillLevels) do
+            local specificCapacity = storage.capacities and storage.capacities[fillTypeIndex]
+            if specificCapacity ~= nil then
+                totalLevel = totalLevel + (fillLevel or 0)
+                totalCapacity = totalCapacity + specificCapacity
+            else
+                sharedLevel = sharedLevel + (fillLevel or 0)
+                sharedFillType = sharedFillType or fillTypeIndex
             end
+        end
 
-            if totalCapacity > 0 then
-                local fillPct = totalLevel / totalCapacity
-
-                if fillPct >= self.SILO_FULL_THRESHOLD and not state.notifiedFull then
-                    state.notifiedFull = true
-                    local siloName = (placeable.getName and placeable:getName()) or g_i18n:getText("farmnotify_silo_full_title")
-                    NotificationManager:push(
-                        NotificationManager.TYPE.SILO_FULL,
-                        g_i18n:getText("farmnotify_silo_full_title"),
-                        string.format(g_i18n:getText("farmnotify_silo_full_msg"), siloName),
-                        nil
-                    )
-                end
-
-                -- Reset so the notification can fire again after the silo is emptied
-                if fillPct < self.SILO_FULL_THRESHOLD - 0.05 then
-                    state.notifiedFull = false
-                end
-
-                state.lastFillPct = fillPct
+        if sharedFillType ~= nil then
+            local sharedCapacity = nil
+            if storage.getCapacity ~= nil then
+                sharedCapacity = storage:getCapacity(sharedFillType)
             end
+            sharedCapacity = sharedCapacity or storage.capacity or 0
+            totalLevel = totalLevel + sharedLevel
+            totalCapacity = totalCapacity + sharedCapacity
+        end
+    else
+        -- A single-fill storage may advertise many fill types, but only the
+        -- currently occupied type consumes its capacity.
+        local activeFillType = nil
+        for fillTypeIndex, fillLevel in pairs(fillLevels) do
+            if fillLevel ~= nil and fillLevel > 0 then
+                activeFillType = fillTypeIndex
+                totalLevel = totalLevel + fillLevel
+            end
+        end
 
-            self.siloStates[siloKey] = state
+        if activeFillType ~= nil then
+            if storage.getCapacity ~= nil then
+                totalCapacity = storage:getCapacity(activeFillType) or 0
+            else
+                totalCapacity = storage.capacity or 0
+            end
         end
     end
+
+    return totalLevel, totalCapacity
 end

@@ -22,8 +22,8 @@ SoundController.DEFAULT_WAV = "sounds/notify_default.wav"
 -- Optional phone-specific MP3 overrides — loaded only if files exist on disk
 -- Not shipped in release; users may place their own sounds here
 SoundController.PHONE_SOUNDS_OPTIONAL = {
-    iphone  = { message = "sounds/iphone_message.mp3",  ringtone = "sounds/iphone_ringtone.mp3"  },
-    samsung = { message = "sounds/samsung_message.mp3", ringtone = "sounds/samsung_ringtone.mp3" },
+    iphone  = { message = "sounds/custom/iphone_message.mp3",  ringtone = "sounds/custom/iphone_ringtone.mp3"  },
+    samsung = { message = "sounds/custom/samsung_message.mp3", ringtone = "sounds/custom/samsung_ringtone.mp3" },
 }
 
 -- Which events count as "ringtone" category for phone-specific override
@@ -95,7 +95,7 @@ function SoundController:play(notifType)
         print("[FarmNotify] No sound for: " .. tostring(notifType))
         return
     end
-    -- playSample(sample, loopCount, volume, pitch, startOffset, randomPitch)
+    -- playSample(sample, loops, volume, offsetMs, delayMs, playAfterSample)
     playSample(sample, 0, self.volume, 0, 0, 0)
 end
 

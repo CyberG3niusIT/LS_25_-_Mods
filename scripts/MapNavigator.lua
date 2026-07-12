@@ -1,115 +1,159 @@
 -- MapNavigator.lua
--- Navigates the in-game map/world to a specific field when player taps a notification
+-- Opens the in-game map and centers it on a field. Never teleports the player.
 
 MapNavigator = {}
+MapNavigator.NAV_RETRY_INTERVAL = 100
+MapNavigator.NAV_MAX_ATTEMPTS = 20
 
 function MapNavigator:init()
+    self._pendingNavigation = nil
     print("[FarmNotify] MapNavigator initialized.")
 end
 
--- Navigate to fieldId: opens map and centers on field if possible,
--- otherwise teleports camera above field center
 function MapNavigator:navigateToField(fieldId)
     if fieldId == nil then
         print("[FarmNotify] MapNavigator: no fieldId provided.")
-        return
+        return false
     end
 
     if g_fieldManager == nil then
         print("[FarmNotify] MapNavigator: g_fieldManager not available.")
-        return
+        return false
     end
-    local field = g_fieldManager:getFieldByIndex(fieldId)
-    if field == nil then
-        -- Some versions use getFields() and iterate
-        if g_fieldManager.getFields then
-            for _, f in pairs(g_fieldManager:getFields()) do
-                if f:getFieldId() == fieldId then
-                    field = f
-                    break
-                end
+
+    local field = nil
+    if g_fieldManager.getFieldById ~= nil then
+        field = g_fieldManager:getFieldById(fieldId)
+    end
+
+    if field == nil and g_fieldManager.fields ~= nil then
+        for _, candidate in pairs(g_fieldManager.fields) do
+            local candidateId = candidate.getId and candidate:getId() or candidate.fieldId
+            if candidateId == fieldId then
+                field = candidate
+                break
             end
         end
     end
 
     if field == nil then
-        print("[FarmNotify] MapNavigator: Field " .. fieldId .. " not found.")
-        return
+        print("[FarmNotify] MapNavigator: Field " .. tostring(fieldId) .. " not found.")
+        return false
     end
 
-    local x, y, z = field:getFieldPosition()
-    if x == nil then
-        -- Fallback: field center from polygon
-        x, y, z = self:_getFieldCenter(field)
-    end
-
+    local x, z = self:_getFieldCenter(field)
     if x == nil then
         print("[FarmNotify] MapNavigator: Could not determine field position.")
-        return
+        return false
     end
 
-    print(string.format("[FarmNotify] Navigating to Field %d at (%.1f, %.1f, %.1f)", fieldId, x, y or 0, z))
+    print(string.format("[FarmNotify] Opening map for Field %s at (%.1f, %.1f)", tostring(fieldId), x, z))
 
-    -- Try to open in-game map and focus
-    if g_currentMission and g_currentMission.inGameMenu then
-        local ingameMap = g_currentMission.inGameMenu.ingameMap
-        if ingameMap and ingameMap.setMapPosition then
-            -- Open the pause menu map
-            g_currentMission.inGameMenu:setIsOpen(true)
-            -- Small delay hack: set position after menu opens
-            -- We use a deferred action
-            MapNavigator._pendingNavX = x
-            MapNavigator._pendingNavZ = z
-            MapNavigator._pendingNavTimer = 300  -- ms
-            return
-        end
+    if g_gui == nil or g_inGameMenu == nil then
+        print("[FarmNotify] MapNavigator: In-game map UI is not available; navigation cancelled safely.")
+        return false
     end
 
-    -- Fallback: move camera directly to field
-    self:_moveCameraToWorld(x, y, z)
+    self._pendingNavigation = {
+        fieldId = fieldId,
+        x = x,
+        z = z,
+        timer = 0,
+        attempts = 0
+    }
+
+    if not g_inGameMenu.isOpen then
+        g_gui:showGui("InGameMenu")
+    end
+
+    -- The menu and its map page become active asynchronously. update() will
+    -- switch to the overview page and pan as soon as all GUI elements exist.
+    return true
 end
 
 function MapNavigator:update(dt)
-    if self._pendingNavTimer and self._pendingNavTimer > 0 then
-        self._pendingNavTimer = self._pendingNavTimer - dt
-        if self._pendingNavTimer <= 0 then
-            self._pendingNavTimer = nil
-            self:_moveCameraToWorld(self._pendingNavX, 0, self._pendingNavZ)
-        end
+    local pending = self._pendingNavigation
+    if pending == nil then return end
+
+    pending.timer = pending.timer - dt
+    if pending.timer > 0 then return end
+
+    pending.timer = self.NAV_RETRY_INTERVAL
+    pending.attempts = pending.attempts + 1
+
+    if self:_focusMapPosition(pending.x, pending.z) then
+        self._pendingNavigation = nil
+    elseif pending.attempts >= self.NAV_MAX_ATTEMPTS then
+        print("[FarmNotify] MapNavigator: Map could not be focused; no player position was changed.")
+        self._pendingNavigation = nil
     end
 end
 
-function MapNavigator:_moveCameraToWorld(x, y, z)
-    if g_currentMission == nil then return end
-    local camera = g_currentMission.controlledVehicle == nil
-                   and g_currentMission.player
-                   or nil
-    if camera and camera.setPosition then
-        local groundY = getTerrainHeightAtWorldPos(g_currentMission.terrainRootNode, x, 0, z) or 0
-        camera:setPosition(x, groundY + 2, z)
-    elseif g_currentMission.cameraSystem then
-        -- Spectator/free camera
-        local sys = g_currentMission.cameraSystem
-        if sys.setTargetPosition then
-            sys:setTargetPosition(x, y or 0, z)
+function MapNavigator:_focusMapPosition(x, z)
+    local menu = g_inGameMenu
+    if menu == nil or not menu.isOpen then return false end
+
+    local page = menu.pageMapOverview
+    if page == nil then return false end
+
+    if menu.currentPage ~= page and menu.pagingElement ~= nil then
+        local mappingIndex = nil
+        if menu.pagingElement.getPageMappingIndexByElement ~= nil then
+            mappingIndex = menu.pagingElement:getPageMappingIndexByElement(page)
+        end
+        if mappingIndex ~= nil and menu.pagingElement.setPage ~= nil then
+            menu.pagingElement:setPage(mappingIndex)
         end
     end
+
+    local mapElement = page.ingameMap
+    if mapElement == nil or mapElement.panToHotspot == nil or mapElement.ingameMap == nil then
+        return false
+    end
+
+    -- panToHotspot only needs getWorldPosition(). A tiny transient target lets
+    -- us center on the exact field label position without registering a fake
+    -- hotspot in the game's map or changing world state.
+    local target = {
+        worldX = x,
+        worldZ = z,
+        getWorldPosition = function(self)
+            return self.worldX, self.worldZ
+        end
+    }
+
+    mapElement:panToHotspot(target)
+    return true
 end
 
 function MapNavigator:_getFieldCenter(field)
-    -- Average of field polygon points
-    if field.fieldDimensions == nil then return nil end
-    local count = getNumOfChildren(field.fieldDimensions)
-    if count == 0 then return nil end
-    local sumX, sumZ = 0, 0
-    for i = 0, count - 1 do
-        local child = getChildAt(field.fieldDimensions, i)
-        local cx, cy, cz = getWorldTranslation(child)
-        sumX = sumX + cx
-        sumZ = sumZ + cz
+    if field.getCenterOfFieldWorldPosition ~= nil then
+        local x, z = field:getCenterOfFieldWorldPosition()
+        if x ~= nil and z ~= nil then return x, z end
     end
-    local cx = sumX / count
-    local cz = sumZ / count
-    local cy = getTerrainHeightAtWorldPos(g_currentMission.terrainRootNode, cx, 0, cz) or 0
-    return cx, cy, cz
+
+    local points = nil
+    if field.getPolygonPoints ~= nil then
+        points = field:getPolygonPoints()
+    else
+        points = field.polygonPoints
+    end
+
+    if points == nil then return nil end
+
+    local sumX = 0
+    local sumZ = 0
+    local count = 0
+
+    for _, point in ipairs(points) do
+        local ok, x, _, z = pcall(getWorldTranslation, point)
+        if ok and x ~= nil then
+            sumX = sumX + x
+            sumZ = sumZ + z
+            count = count + 1
+        end
+    end
+
+    if count == 0 then return nil end
+    return sumX / count, sumZ / count
 end

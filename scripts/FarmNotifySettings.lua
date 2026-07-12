@@ -2,7 +2,8 @@
 -- Persists player preferences (phone model, volume, etc.) to user profile
 
 FarmNotifySettings = {}
-FarmNotifySettings.SETTINGS_FILE = "FarmNotifySettings.xml"
+FarmNotifySettings.SETTINGS_DIR  = "modSettings"
+FarmNotifySettings.SETTINGS_FILE = "FarmNotify.xml"
 
 FarmNotifySettings.defaults = {
     phoneModel    = "iphone",   -- "iphone" | "samsung"
@@ -22,12 +23,16 @@ function FarmNotifySettings:init()
 end
 
 function FarmNotifySettings:getFilePath()
-    return getUserProfileAppPath() .. self.SETTINGS_FILE
+    local basePath = getUserProfileAppPath() .. self.SETTINGS_DIR
+    if createFolder ~= nil then
+        createFolder(basePath)
+    end
+    return basePath .. "/" .. self.SETTINGS_FILE
 end
 
 function FarmNotifySettings:load()
     local path = self:getFilePath()
-    local xmlFile = loadXMLFile("FarmNotifySettings", path)
+    local xmlFile = fileExists(path) and loadXMLFile("FarmNotifySettings", path) or nil
     if xmlFile == nil then
         print("[FarmNotify] No settings file found — using defaults.")
         return
@@ -44,9 +49,16 @@ function FarmNotifySettings:load()
     self.current.popupDuration = getXMLInt(xmlFile, "FarmNotifySettings.popupDuration")
                                  or self.defaults.popupDuration
     self.current.position      = getXMLString(xmlFile, "FarmNotifySettings.position")
-                                 or self.defaults.position
+                                  or self.defaults.position
 
-    deleteXMLFile(xmlFile)
+    if self.current.phoneModel ~= "iphone" and self.current.phoneModel ~= "samsung" then
+        self.current.phoneModel = self.defaults.phoneModel
+    end
+    self.current.volume = math.max(0, math.min(1, self.current.volume))
+    self.current.popupDuration = math.max(3000, math.min(20000, self.current.popupDuration))
+    self.current.position = "bottomRight"
+
+    delete(xmlFile)
     print("[FarmNotify] Settings loaded.")
 end
 
@@ -65,7 +77,7 @@ function FarmNotifySettings:save()
     setXMLString(xmlFile, "FarmNotifySettings.position",      self.current.position)
 
     saveXMLFile(xmlFile)
-    deleteXMLFile(xmlFile)
+    delete(xmlFile)
     print("[FarmNotify] Settings saved.")
 end
 
@@ -78,7 +90,12 @@ function FarmNotifySettings:set(key, value)
         print("[FarmNotify] Unknown setting: " .. tostring(key))
         return
     end
-    if self.current[key] == value then return end  -- L05: skip save if unchanged
+    if key == "phoneModel" and value ~= "iphone" and value ~= "samsung" then return end
+    if key == "volume" then value = math.max(0, math.min(1, tonumber(value) or self.defaults.volume)) end
+    if key == "popupDuration" then value = math.max(3000, math.min(20000, tonumber(value) or self.defaults.popupDuration)) end
+    if key == "showPopups" then value = value == true end
+    if key == "position" then value = "bottomRight" end
+    if self.current[key] == value then return end
     self.current[key] = value
     self:save()
 end

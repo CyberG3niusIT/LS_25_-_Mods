@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
-<modDesc descVersion="73">
+<modDesc descVersion="110">
     <author>CyberG3nius</author>
-    <version>1.0.0.0</version>
+    <version>1.1.0.0</version>
     <title>
         <en>FarmNotify</en>
         <de>FarmNotify</de>
@@ -10,10 +10,29 @@
         <en>Real smartphone notification system for Farming Simulator 25. Receive live alerts on a rendered iPhone or Samsung Galaxy when fields are harvest-ready, workers finish, fuel runs low, or bad weather is incoming. Choose your phone model in the mod settings.</en>
         <de>Echtes Smartphone-Benachrichtigungssystem für den Landwirtschafts-Simulator 25. Erhalte Live-Meldungen auf einem gerenderten iPhone oder Samsung Galaxy wenn Felder erntereif sind, Helfer fertig sind, Tank leer wird oder schlechtes Wetter droht. Wähle dein Handy-Modell in den Mod-Einstellungen.</de>
     </description>
-    <iconFilename>textures/icons/icon_farmnotify.png</iconFilename>
+    <iconFilename>textures/icons/icon_farmnotify.dds</iconFilename>
     <multiplayer supported="true"/>
+    <actions>
+        <action name="FARMNOTIFY_TOGGLE_INBOX" category="ONFOOT VEHICLE" axisType="HALF" ignoreComboMask="false"/>
+        <action name="FARMNOTIFY_DISMISS" category="ONFOOT VEHICLE" axisType="HALF" ignoreComboMask="false"/>
+        <action name="FARMNOTIFY_SCROLL_UP" category="ONFOOT VEHICLE" axisType="HALF" ignoreComboMask="false"/>
+        <action name="FARMNOTIFY_SCROLL_DOWN" category="ONFOOT VEHICLE" axisType="HALF" ignoreComboMask="false"/>
+    </actions>
+    <inputBinding>
+        <actionBinding action="FARMNOTIFY_TOGGLE_INBOX">
+            <binding device="KB_MOUSE_DEFAULT" input="KEY_n" neutralInput="0" index="1"/>
+        </actionBinding>
+        <actionBinding action="FARMNOTIFY_DISMISS">
+            <binding device="KB_MOUSE_DEFAULT" input="KEY_escape" neutralInput="0" index="1"/>
+        </actionBinding>
+        <actionBinding action="FARMNOTIFY_SCROLL_UP">
+            <binding device="KB_MOUSE_DEFAULT" input="MOUSE_WHEEL_UP" neutralInput="0" index="1"/>
+        </actionBinding>
+        <actionBinding action="FARMNOTIFY_SCROLL_DOWN">
+            <binding device="KB_MOUSE_DEFAULT" input="MOUSE_WHEEL_DOWN" neutralInput="0" index="1"/>
+        </actionBinding>
+    </inputBinding>
     <extraSourceFiles>
-        <sourceFile filename="scripts/FarmNotify.lua"/>
         <sourceFile filename="scripts/NotificationManager.lua"/>
         <sourceFile filename="scripts/EventDetector.lua"/>
         <sourceFile filename="scripts/PhoneModel.lua"/>
@@ -22,7 +41,7 @@
         <sourceFile filename="scripts/SoundController.lua"/>
         <sourceFile filename="scripts/MapNavigator.lua"/>
         <sourceFile filename="scripts/FarmNotifySettings.lua"/>
+        <sourceFile filename="scripts/FarmNotify.lua"/>
     </extraSourceFiles>
     <l10n filenamePrefix="lang/lang"/>
-    <inputBinding filename="inputBinding.xml"/>
 </modDesc>

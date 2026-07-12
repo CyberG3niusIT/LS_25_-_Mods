@@ -37,4 +37,9 @@
     <text name="farmnotify_settings_popup_duration">Anzeigedauer (Sekunden)</text>
     <text name="farmnotify_phone_iphone">iPhone 16 Pro Max</text>
     <text name="farmnotify_phone_samsung">Samsung Galaxy S26 Ultra</text>
+    <!-- Input actions -->
+    <text name="input_FARMNOTIFY_TOGGLE_INBOX">FarmNotify: Posteingang öffnen/schließen</text>
+    <text name="input_FARMNOTIFY_DISMISS">FarmNotify: Anzeige schließen</text>
+    <text name="input_FARMNOTIFY_SCROLL_UP">FarmNotify: Nach oben blättern</text>
+    <text name="input_FARMNOTIFY_SCROLL_DOWN">FarmNotify: Nach unten blättern</text>
 </l10n>

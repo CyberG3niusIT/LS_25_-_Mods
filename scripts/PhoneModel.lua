@@ -1,6 +1,5 @@
 -- PhoneModel.lua
--- Manages phone frame overlays for iPhone 16 Pro Max and Samsung Galaxy S26 Ultra
--- Textures must be provided as DDS files in textures/phones/
+-- Manages phone frame overlays for iPhone 16 Pro Max and Samsung Galaxy S26 Ultra.
 
 PhoneModel = {}
 
@@ -62,6 +61,16 @@ PhoneModel.renderY  = 0
 PhoneModel.renderW  = 0
 PhoneModel.renderH  = 0
 
+local function getViewportAspectRatio()
+    if type(g_screenAspectRatio) == "number" and g_screenAspectRatio > 0 then
+        return g_screenAspectRatio
+    end
+    if type(g_screenWidth) == "number" and type(g_screenHeight) == "number" and g_screenHeight > 0 then
+        return g_screenWidth / g_screenHeight
+    end
+    return 16 / 9
+end
+
 function PhoneModel:init(modDir, modelId)
     self.modDir = modDir
     self:setModel(modelId or "iphone")
@@ -80,26 +89,46 @@ function PhoneModel:setModel(modelId)
         self.overlay = nil
     end
 
+    if self.modDir == nil then
+        print("[FarmNotify] WARNING: Phone model initialized without a mod directory.")
+        return false
+    end
+
     local texPath = self.modDir .. model.frameTexture
     -- Overlay.new(texturePath, x, y, width, height)
     -- Position/size updated every draw call via overlay:setPosition / overlay:setDimension
-    self.overlay = Overlay.new(texPath, 0, 0, 0.1, 0.1)
-    if self.overlay == nil then
+    local textureExists = fileExists == nil or fileExists(texPath)
+    if textureExists and Overlay ~= nil and Overlay.new ~= nil then
+        self.overlay = Overlay.new(texPath, 0, 0, 0.1, 0.1)
+    end
+    if self.overlay == nil or (self.overlay.overlayId ~= nil and self.overlay.overlayId == 0) then
+        if self.overlay ~= nil then
+            self.overlay:delete()
+            self.overlay = nil
+        end
         print("[FarmNotify] WARNING: Phone texture not found: " .. texPath)
-        print("[FarmNotify] Place artist-created DDS file at: " .. texPath)
+        print("[FarmNotify] Using the built-in fallback frame.")
     end
 
     print(string.format("[FarmNotify] Phone model: %s", model.displayName))
+    return true
 end
 
 -- Returns phone render rect for given bottom-center Y position (from animator)
 function PhoneModel:computeRect(bottomY)
     if self.current == nil then return 0, 0, 0, 0 end
 
-    local h = self.PHONE_HEIGHT
-    local w = h * self.current.aspectRatio * (9 / 16)  -- correct for screen AR
+    local viewportAspect = getViewportAspectRatio()
+    local h = math.max(0.1, math.min(0.95, self.PHONE_HEIGHT))
+    local w = h * self.current.aspectRatio / viewportAspect
+    local maxW = math.max(0.1, 1.0 - 2 * self.PHONE_MARGIN_X)
+    if w > maxW then
+        local scale = maxW / w
+        w = maxW
+        h = h * scale
+    end
     local x = 1.0 - w - self.PHONE_MARGIN_X
-    local y = bottomY
+    local y = tonumber(bottomY) or -h
 
     self.renderX = x
     self.renderY = y
@@ -119,12 +148,20 @@ function PhoneModel:getScreenRect()
         s.h * self.renderH
 end
 
+function PhoneModel:getRenderRect()
+    return self.renderX, self.renderY, self.renderW, self.renderH
+end
+
 function PhoneModel:render(bottomY)
-    if self.overlay == nil then return end
     local x, y, w, h = self:computeRect(bottomY)
-    self.overlay:setPosition(x, y)
-    self.overlay:setDimension(w, h)
-    self.overlay:render()
+    if self.overlay ~= nil then
+        self.overlay:setPosition(x, y)
+        self.overlay:setDimension(w, h)
+        self.overlay:render()
+    elseif drawFilledRect ~= nil then
+        -- Keep the UI usable even if a texture cannot be loaded.
+        drawFilledRect(x, y, w, h, 0.015, 0.015, 0.02, 0.98)
+    end
 end
 
 function PhoneModel:delete()

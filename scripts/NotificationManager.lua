@@ -37,11 +37,12 @@ function NotificationManager:init()
     self.queue     = {}
     self.history   = {}
     self.cooldowns = {}
+    self._idSeq    = 0
 end
 
 -- Push new notification. Returns notification object or nil if cooldown active.
 function NotificationManager:push(notifType, title, message, fieldId, vehicleId)
-    local cooldownKey = notifType .. "_" .. tostring(fieldId or "") .. tostring(vehicleId or "")
+    local cooldownKey = notifType .. "|" .. tostring(fieldId or "") .. "|" .. tostring(vehicleId or "")
     local now = g_time or 0
     local cooldown = self.COOLDOWNS[notifType] or 0
 
@@ -88,6 +89,8 @@ function NotificationManager:markDisplayed(id)
     for i, n in ipairs(self.queue) do
         if n.id == id then
             n.displayed = true
+            -- The queue contains pending popups only. Unread state lives in history.
+            table.remove(self.queue, i)
             return
         end
     end
@@ -111,6 +114,13 @@ end
 function NotificationManager:markAllRead()
     for _, n in ipairs(self.history) do
         n.isRead = true
+    end
+    self.queue = {}
+end
+
+function NotificationManager:clearPendingPopups()
+    for _, n in ipairs(self.queue) do
+        n.displayed = true
     end
     self.queue = {}
 end
@@ -149,7 +159,7 @@ function NotificationManager:saveToXML(xmlFile, baseKey)
     local now = g_time or 0
     local activeCooldowns = {}
     for k, v in pairs(self.cooldowns) do
-        local cooldownType = k:match("^([^_]+)")
+        local cooldownType = k:match("^([^|]+)")
         local maxCooldown  = self.COOLDOWNS[cooldownType] or 0
         if (now - v) < maxCooldown then
             table.insert(activeCooldowns, k)
@@ -174,17 +184,22 @@ function NotificationManager:loadFromXML(xmlFile, baseKey)
             message   = getXMLString(xmlFile, key .. "#message") or "",
             fieldId   = getXMLInt   (xmlFile, key .. "#fieldId"),
             time      = getXMLFloat (xmlFile, key .. "#time")    or 0,
-            isRead    = getXMLBool  (xmlFile, key .. "#isRead"),
+            isRead    = getXMLBool  (xmlFile, key .. "#isRead") or false,
             displayed = true,
         }
         if n.fieldId == -1 then n.fieldId = nil end
 
         -- P2-3: Discard stale fieldIds that no longer exist in the loaded map
         if n.fieldId ~= nil and g_fieldManager ~= nil then
-            local found = g_fieldManager:getFieldByIndex(n.fieldId) ~= nil
-            if not found and g_fieldManager.getFields then
-                for _, f in pairs(g_fieldManager:getFields()) do
-                    if f:getFieldId() == n.fieldId then found = true; break end
+            local found = false
+            if g_fieldManager.getFieldByIndex then
+                found = g_fieldManager:getFieldByIndex(n.fieldId) ~= nil
+            end
+            local fields = g_fieldManager.getFields and g_fieldManager:getFields() or g_fieldManager.fields
+            if not found and fields then
+                for _, f in pairs(fields) do
+                    local id = f.fieldId or (f.getId and f:getId())
+                    if id == n.fieldId then found = true; break end
                 end
             end
             if not found then n.fieldId = nil end

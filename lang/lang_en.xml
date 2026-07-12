@@ -37,4 +37,9 @@
     <text name="farmnotify_settings_popup_duration">Display duration (seconds)</text>
     <text name="farmnotify_phone_iphone">iPhone 16 Pro Max</text>
     <text name="farmnotify_phone_samsung">Samsung Galaxy S26 Ultra</text>
+    <!-- Input actions -->
+    <text name="input_FARMNOTIFY_TOGGLE_INBOX">FarmNotify: Open/close inbox</text>
+    <text name="input_FARMNOTIFY_DISMISS">FarmNotify: Close display</text>
+    <text name="input_FARMNOTIFY_SCROLL_UP">FarmNotify: Scroll up</text>
+    <text name="input_FARMNOTIFY_SCROLL_DOWN">FarmNotify: Scroll down</text>
 </l10n>
