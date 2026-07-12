@@ -1,5 +1,5 @@
 -- SoundController.lua
--- Plays notification sounds — event-specific WAV primary, optional phone-specific MP3 override
+-- Plays notification sounds — event-specific WAV primary, phone-specific WAV override
 
 SoundController = {}
 SoundController.modDir  = nil
@@ -19,11 +19,10 @@ SoundController.EVENT_WAV = {
 }
 SoundController.DEFAULT_WAV = "sounds/notify_default.wav"
 
--- Optional phone-specific MP3 overrides — loaded only if files exist on disk
--- Not shipped in release; users may place their own sounds here
+-- Phone-specific WAV overrides (CC0, Kenney Interface Sounds — see sounds/custom/LICENSE.txt)
 SoundController.PHONE_SOUNDS_OPTIONAL = {
-    iphone  = { message = "sounds/custom/iphone_message.mp3",  ringtone = "sounds/custom/iphone_ringtone.mp3"  },
-    samsung = { message = "sounds/custom/samsung_message.mp3", ringtone = "sounds/custom/samsung_ringtone.mp3" },
+    iphone  = { message = "sounds/custom/iphone_message.wav",  ringtone = "sounds/custom/iphone_ringtone.wav"  },
+    samsung = { message = "sounds/custom/samsung_message.wav", ringtone = "sounds/custom/samsung_ringtone.wav" },
 }
 
 -- Which events count as "ringtone" category for phone-specific override
