@@ -50,7 +50,7 @@ function SoundController:_loadAll()
     end
     self.samples.default = self:_loadFile("wav_default", self.DEFAULT_WAV)
 
-    -- Try loading optional phone-specific MP3 overrides (silent on failure)
+    -- Try loading optional phone-specific WAV overrides (silent on failure)
     self.samples.phone = {}
     for modelId, files in pairs(self.PHONE_SOUNDS_OPTIONAL) do
         self.samples.phone[modelId] = {}
@@ -64,7 +64,7 @@ end
 function SoundController:_loadFile(key, relPath)
     local path   = self.modDir .. relPath
     local sample = createSample(key)
-    if sample == nil then
+    if sample == nil or sample == 0 then
         print("[FarmNotify] createSample failed: " .. key)
         return nil
     end
@@ -72,19 +72,20 @@ function SoundController:_loadFile(key, relPath)
         return sample
     else
         print("[FarmNotify] Could not load: " .. path)
-        deleteSample(sample)
+        delete(sample)
         return nil
     end
 end
 
 function SoundController:_loadFileOptional(key, relPath)
     local path   = self.modDir .. relPath
+    if fileExists ~= nil and not fileExists(path) then return nil end
     local sample = createSample(key)
-    if sample == nil then return nil end
+    if sample == nil or sample == 0 then return nil end
     if loadSample(sample, path, false) then
         return sample
     end
-    deleteSample(sample)
+    delete(sample)
     return nil
 end
 
@@ -138,12 +139,12 @@ end
 function SoundController:delete()
     self:stopAll()
     for _, sample in pairs(self.samples.event or {}) do
-        if sample ~= nil then deleteSample(sample) end
+        if sample ~= nil then delete(sample) end
     end
-    if self.samples.default then deleteSample(self.samples.default) end
+    if self.samples.default then delete(self.samples.default) end
     for _, modelSounds in pairs(self.samples.phone or {}) do
         for _, sample in pairs(modelSounds) do
-            if sample ~= nil then deleteSample(sample) end
+            if sample ~= nil then delete(sample) end
         end
     end
     self.samples = {}

@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.1] — 2026-09-08
+
+- Correct external localization XML and update readiness/withering/weather descriptions.
+- Correct mission-start gating, dedicated-server detection and audio handle cleanup.
+- Save/load history using alternating recoverable snapshots and the mission save method.
+- Scope notification history to farms; retry suppressed transitions and separate silo identities.
+- Guard GUI input and preserve cursor ownership when navigating from the inbox.
+- Add regression checks; in-game and multiplayer validation remains pending.
+
 ## [1.0.0] — 2026-06-27
 
 ### Added

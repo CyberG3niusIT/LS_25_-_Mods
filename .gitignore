@@ -1,4 +1,5 @@
 /dist/
 /farmnotify_upload.vdf
 /sounds/custom/*.mp3
+__pycache__/
 

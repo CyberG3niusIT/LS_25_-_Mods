@@ -23,6 +23,11 @@ EventDetector.siloStates   = {} -- silo key -> {notifiedFull, lastFillPct}
 EventDetector.activeAIJobs = {} -- job -> stable data captured when the job starts
 
 function EventDetector:init()
+    self:delete()
+    self.farmId = nil
+    self.pendingEvents = {}
+    self.objectIds = setmetatable({}, {__mode="k"})
+    self.nextObjectId = 0
     self.fieldStates   = {}
     self.vehicleStates = {}
     self.weatherState  = { initialized = false, wasRaining = false }
@@ -35,7 +40,8 @@ function EventDetector:init()
 
     -- AI job stop messages carry the real completion reason. Polling
     -- getIsAIActive() cannot distinguish success, an error, and a user stop.
-    if g_messageCenter ~= nil then
+    if g_messageCenter ~= nil and MessageType ~= nil then
+        self.messageCenter = g_messageCenter
         g_messageCenter:unsubscribeAll(self)
 
         if MessageType.AI_JOB_STARTED ~= nil then
@@ -49,7 +55,53 @@ function EventDetector:init()
     print("[FarmNotify] EventDetector initialized.")
 end
 
+function EventDetector:delete()
+    if self.messageCenter ~= nil then self.messageCenter:unsubscribeAll(self) end
+    self.messageCenter = nil
+    self.activeAIJobs = {}
+    self.pendingEvents = {}
+    self.fieldStates, self.vehicleStates, self.siloStates = {}, {}, {}
+    self.farmId = nil
+end
+
+function EventDetector:syncFarm()
+    local farmId = self:_getLocalFarmId()
+    NotificationManager:setFarmId(farmId)
+    farmId = NotificationManager.farmId
+    if self.farmId ~= farmId then
+        self.farmId = farmId
+        self.fieldStates, self.vehicleStates, self.siloStates = {}, {}, {}
+        self.activeAIJobs, self.pendingEvents = {}, {}
+        self.weatherState = {initialized=false, wasRaining=false}
+        self.fieldTimer, self.vehicleTimer = self.FIELD_CHECK_INTERVAL, self.VEHICLE_CHECK_INTERVAL
+        self.weatherTimer, self.siloTimer = self.WEATHER_CHECK_INTERVAL, self.SILO_CHECK_INTERVAL
+    end
+    return farmId
+end
+
+-- Only one-shot events need a retry buffer; level detectors retry on their
+-- next scan. Bound retention to ten minutes and fifty distinct events.
+function EventDetector:_pushOrRetry(notifType, title, message, fieldId, entityId)
+    if NotificationManager:push(notifType, title, message, fieldId, entityId) ~= nil then return end
+    local key = notifType .. "|" .. tostring(fieldId) .. "|" .. tostring(entityId)
+    for _, event in ipairs(self.pendingEvents) do
+        if event.key == key then return end
+    end
+    if #self.pendingEvents >= 50 then table.remove(self.pendingEvents, 1) end
+    table.insert(self.pendingEvents, {key=key, type=notifType, title=title, message=message,
+        fieldId=fieldId, entityId=entityId, expires=(g_time or 0)+600000})
+end
+
 function EventDetector:update(dt)
+    if self:syncFarm() == nil then return end
+    NotificationManager:cleanupCooldowns()
+    for i = #self.pendingEvents, 1, -1 do
+        local event = self.pendingEvents[i]
+        if (g_time or 0) >= event.expires or NotificationManager:push(event.type,
+            event.title, event.message, event.fieldId, event.entityId) ~= nil then
+            table.remove(self.pendingEvents, i)
+        end
+    end
     self.fieldTimer   = self.fieldTimer   + dt
     self.vehicleTimer = self.vehicleTimer + dt
     self.weatherTimer = self.weatherTimer + dt
@@ -80,10 +132,12 @@ function EventDetector:checkFields()
     local myFarmId = self:_getLocalFarmId()
     if fields == nil or myFarmId == nil then return end
 
+    local seen = {}
     for _, field in pairs(fields) do
         local fieldId = self:_getFieldId(field)
 
         if fieldId ~= nil and self:_isFieldOwnedByFarm(field, myFarmId) then
+            seen[fieldId] = true
             local fieldState = nil
             if field.getFieldState ~= nil then
                 fieldState = field:getFieldState()
@@ -96,6 +150,10 @@ function EventDetector:checkFields()
                 local growthState = fieldState.growthState
                 local fruitTypeDesc = g_fruitTypeManager and g_fruitTypeManager:getFruitTypeByIndex(fruitTypeIndex)
                 local state = self.fieldStates[fieldId] or {}
+                if state.fruitTypeIndex ~= fruitTypeIndex then
+                    state.notifiedReady, state.notifiedOverdue = false, false
+                    state.fruitTypeIndex = fruitTypeIndex
+                end
 
                 if fruitTypeDesc ~= nil and fruitTypeIndex ~= FruitType.UNKNOWN and growthState ~= nil then
                     local isWithered = fruitTypeDesc:getIsWithered(growthState)
@@ -106,25 +164,23 @@ function EventDetector:checkFields()
                     -- so one scan can never emit both notifications.
                     if isWithered then
                         if not state.notifiedOverdue then
-                            state.notifiedOverdue = true
                             state.notifiedReady = false
-                            NotificationManager:push(
+                            state.notifiedOverdue = NotificationManager:push(
                                 NotificationManager.TYPE.HARVEST_OVERDUE,
                                 string.format(g_i18n:getText("farmnotify_harvest_overdue_title"), fieldId),
                                 string.format(g_i18n:getText("farmnotify_harvest_overdue_msg"), fruitName),
                                 fieldId
-                            )
+                            ) ~= nil
                         end
                     elseif isHarvestReady then
                         if not state.notifiedReady then
-                            state.notifiedReady = true
                             state.notifiedOverdue = false
-                            NotificationManager:push(
+                            state.notifiedReady = NotificationManager:push(
                                 NotificationManager.TYPE.HARVEST_READY,
                                 string.format(g_i18n:getText("farmnotify_harvest_ready_title"), fieldId),
                                 string.format(g_i18n:getText("farmnotify_harvest_ready_msg"), fruitName),
                                 fieldId
-                            )
+                            ) ~= nil
                         end
                     else
                         -- Cut, growing, or replanted: arm the next crop cycle.
@@ -143,6 +199,9 @@ function EventDetector:checkFields()
             end
         end
     end
+    for id in pairs(self.fieldStates) do
+        if not seen[id] then self.fieldStates[id] = nil end
+    end
 end
 
 -- Vehicle fuel events ------------------------------------------------------
@@ -158,7 +217,7 @@ function EventDetector:checkVehicles()
         local vehicleFarmId = vehicle.getOwnerFarmId and vehicle:getOwnerFarmId()
 
         if vehicleFarmId == myFarmId then
-            local vehicleKey = tostring(vehicle)
+            local vehicleKey = self:_getEntityKey(vehicle, "vehicle")
             seenVehicleKeys[vehicleKey] = true
 
             local fuelPct = self:_getFuelPercentage(vehicle)
@@ -166,16 +225,17 @@ function EventDetector:checkVehicles()
                 local state = self.vehicleStates[vehicleKey] or {}
 
                 if fuelPct <= self.FUEL_THRESHOLD
-                    and (state.lastFuelPct == nil or state.lastFuelPct > self.FUEL_THRESHOLD) then
+                    and not state.notifiedLow then
                     local vehicleName = self:_getVehicleName(vehicle)
-                    NotificationManager:push(
+                    state.notifiedLow = NotificationManager:push(
                         NotificationManager.TYPE.FUEL_LOW,
                         g_i18n:getText("farmnotify_fuel_low_title"),
                         string.format(g_i18n:getText("farmnotify_fuel_low_msg"), vehicleName, math.floor(fuelPct * 100)),
                         nil,
                         vehicleKey
-                    )
+                    ) ~= nil
                 end
+                if fuelPct > self.FUEL_THRESHOLD then state.notifiedLow = false end
 
                 state.lastFuelPct = fuelPct
                 self.vehicleStates[vehicleKey] = state
@@ -194,6 +254,7 @@ end
 -- AI worker events ---------------------------------------------------------
 
 function EventDetector:onAIJobStarted(job, startedFarmId)
+    if self.farmId == nil or self.farmId ~= self:_getLocalFarmId() then return end
     if job == nil or startedFarmId ~= self:_getLocalFarmId() then return end
 
     local vehicle = self:_getAIJobVehicle(job)
@@ -201,12 +262,13 @@ function EventDetector:onAIJobStarted(job, startedFarmId)
         farmId = startedFarmId,
         vehicle = vehicle,
         vehicleName = self:_getVehicleName(vehicle),
-        vehicleKey = vehicle and tostring(vehicle) or tostring(job),
+        vehicleKey = self:_getEntityKey(vehicle or job, vehicle and "vehicle" or "job"),
         fieldId = self:_getFieldIdAtVehicle(vehicle)
     }
 end
 
 function EventDetector:onAIJobStopped(job, aiMessage)
+    if self.farmId == nil or self.farmId ~= self:_getLocalFarmId() then return end
     if job == nil then return end
 
     local tracked = self.activeAIJobs[job]
@@ -217,7 +279,7 @@ function EventDetector:onAIJobStopped(job, aiMessage)
 
     local vehicle = (tracked and tracked.vehicle) or self:_getAIJobVehicle(job)
     local vehicleName = (tracked and tracked.vehicleName) or self:_getVehicleName(vehicle)
-    local vehicleKey = (tracked and tracked.vehicleKey) or (vehicle and tostring(vehicle)) or tostring(job)
+    local vehicleKey = (tracked and tracked.vehicleKey) or self:_getEntityKey(vehicle or job, vehicle and "vehicle" or "job")
     local fieldId = (tracked and tracked.fieldId) or self:_getFieldIdAtVehicle(vehicle)
 
     local finishedNormally = aiMessage ~= nil
@@ -231,7 +293,7 @@ function EventDetector:onAIJobStopped(job, aiMessage)
         and aiMessage:getType() == AIMessageType.ERROR
 
     if finishedNormally then
-        NotificationManager:push(
+        self:_pushOrRetry(
             NotificationManager.TYPE.WORKER_DONE,
             g_i18n:getText("farmnotify_worker_done_title"),
             string.format(g_i18n:getText("farmnotify_worker_done_msg"), vehicleName),
@@ -239,7 +301,7 @@ function EventDetector:onAIJobStopped(job, aiMessage)
             vehicleKey
         )
     elseif failed then
-        NotificationManager:push(
+        self:_pushOrRetry(
             NotificationManager.TYPE.WORKER_STUCK,
             g_i18n:getText("farmnotify_worker_stuck_title"),
             string.format(g_i18n:getText("farmnotify_worker_stuck_msg"), vehicleName),
@@ -270,7 +332,7 @@ function EventDetector:checkWeather()
 
     if isRaining and not self.weatherState.wasRaining then
         local title = g_i18n:getText("farmnotify_weather_rain_title")
-        NotificationManager:push(
+        self:_pushOrRetry(
             NotificationManager.TYPE.WEATHER_RAIN,
             title,
             title,
@@ -294,7 +356,7 @@ function EventDetector:checkSilos()
 
     local placeables = placeableSystem:getPlaceables()
     if placeables == nil then return end
-
+    local seen = {}
     for _, placeable in pairs(placeables) do
         local silo = placeable.spec_silo
 
@@ -323,11 +385,11 @@ function EventDetector:checkSilos()
 
                 if totalCapacity > 0 then
                     local fillPct = math.min(totalLevel / totalCapacity, 1)
-                    local siloKey = tostring(placeable) .. "|" .. tostring(myFarmId)
+                    local siloKey = self:_getEntityKey(placeable, "silo")
+                    seen[siloKey] = true
                     local state = self.siloStates[siloKey] or {}
 
                     if fillPct >= self.SILO_FULL_THRESHOLD and not state.notifiedFull then
-                        state.notifiedFull = true
                         local siloName = nil
                         if placeable.getName ~= nil then
                             siloName = placeable:getName()
@@ -336,12 +398,13 @@ function EventDetector:checkSilos()
                             siloName = g_i18n:getText("farmnotify_silo_full_title")
                         end
 
-                        NotificationManager:push(
+                        state.notifiedFull = NotificationManager:push(
                             NotificationManager.TYPE.SILO_FULL,
                             g_i18n:getText("farmnotify_silo_full_title"),
                             string.format(g_i18n:getText("farmnotify_silo_full_msg"), siloName),
-                            nil
-                        )
+                            nil,
+                            siloKey
+                        ) ~= nil
                     elseif fillPct < self.SILO_RESET_THRESHOLD then
                         state.notifiedFull = false
                     end
@@ -351,6 +414,9 @@ function EventDetector:checkSilos()
                 end
             end
         end
+    end
+    for key in pairs(self.siloStates) do
+        if not seen[key] then self.siloStates[key] = nil end
     end
 end
 
@@ -367,8 +433,20 @@ function EventDetector:_getLocalFarmId()
         farmId = g_localPlayer.farmId
     end
 
-    if farmId == nil or farmId <= 0 then return nil end
+    if farmId == nil or farmId <= 0 or farmId == 255 then return nil end
     return farmId
+end
+
+function EventDetector:_getEntityKey(object, kind)
+    local id = object.getUniqueId and object:getUniqueId() or object.uniqueId
+    if id ~= nil and id ~= "" then return kind .. ":" .. tostring(id) end
+    -- Unsaved objects have no reload-stable identity. A weak-key serial avoids
+    -- pointer reuse and is explicitly excluded from cooldown persistence.
+    if self.objectIds[object] == nil then
+        self.nextObjectId = self.nextObjectId + 1
+        self.objectIds[object] = self.nextObjectId
+    end
+    return "session:" .. kind .. ":" .. tostring(self.objectIds[object])
 end
 
 function EventDetector:_getFieldId(field)

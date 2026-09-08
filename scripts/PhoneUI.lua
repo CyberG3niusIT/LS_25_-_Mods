@@ -469,8 +469,8 @@ function PhoneUI:_handleInboxClick(screenX, screenY, sx, sy, sw, sh)
             local notif = history[i]
             NotificationManager:markRead(notif.id)
             if notif.fieldId ~= nil then
-                MapNavigator:navigateToField(notif.fieldId)
                 self:_closeInbox()
+                MapNavigator:navigateToField(notif.fieldId)
             end
             return
         end

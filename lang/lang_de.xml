@@ -1,45 +1,47 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <l10n>
+    <texts>
     <!-- Harvest -->
-    <text name="farmnotify_harvest_ready_title">Feld %d erntereif</text>
-    <text name="farmnotify_harvest_ready_msg">%s kann jetzt geerntet werden.</text>
-    <text name="farmnotify_harvest_overdue_title">Feld %d — Ernte überfällig!</text>
-    <text name="farmnotify_harvest_overdue_msg">%s verwelkt! Sofort ernten.</text>
+    <text name="farmnotify_harvest_ready_title" text="Feld %d erntereif"/>
+    <text name="farmnotify_harvest_ready_msg" text="%s kann jetzt geerntet werden."/>
+    <text name="farmnotify_harvest_overdue_title" text="Feld %d — Ernte überfällig!"/>
+    <text name="farmnotify_harvest_overdue_msg" text="%s ist verwelkt. Feldzustand prüfen."/>
     <!-- Worker -->
-    <text name="farmnotify_worker_done_title">Helfer fertig</text>
-    <text name="farmnotify_worker_done_msg">%s hat die Aufgabe abgeschlossen.</text>
-    <text name="farmnotify_worker_stuck_title">Helfer steckt fest!</text>
-    <text name="farmnotify_worker_stuck_msg">%s konnte Aufgabe nicht beenden.</text>
+    <text name="farmnotify_worker_done_title" text="Helfer fertig"/>
+    <text name="farmnotify_worker_done_msg" text="%s hat die Aufgabe abgeschlossen."/>
+    <text name="farmnotify_worker_stuck_title" text="Helfer steckt fest!"/>
+    <text name="farmnotify_worker_stuck_msg" text="%s konnte Aufgabe nicht beenden."/>
     <!-- Fuel -->
-    <text name="farmnotify_fuel_low_title">Tank fast leer</text>
-    <text name="farmnotify_fuel_low_msg">%s — noch %d%% Kraftstoff.</text>
+    <text name="farmnotify_fuel_low_title" text="Tank fast leer"/>
+    <text name="farmnotify_fuel_low_msg" text="%s — noch %d%% Kraftstoff."/>
     <!-- Silo -->
-    <text name="farmnotify_silo_full_title">Silo voll</text>
-    <text name="farmnotify_silo_full_msg">%s ist voll. Kapazität prüfen.</text>
+    <text name="farmnotify_silo_full_title" text="Silo voll"/>
+    <text name="farmnotify_silo_full_msg" text="%s ist voll. Kapazität prüfen."/>
     <!-- Weather -->
-    <text name="farmnotify_weather_rain_title">Regen eingesetzt</text>
-    <text name="farmnotify_weather_rain_msg">Feldarbeiten unterbrechen — Boden wird nass.</text>
-    <text name="farmnotify_weather_storm_title">Sturm-Warnung!</text>
-    <text name="farmnotify_weather_storm_msg">Starker Wind und Regen — Helfer zurückziehen.</text>
+    <text name="farmnotify_weather_rain_title" text="Regen eingesetzt"/>
+    <text name="farmnotify_weather_rain_msg" text="Feldarbeiten unterbrechen — Boden wird nass."/>
+    <text name="farmnotify_weather_storm_title" text="Sturm-Warnung!"/>
+    <text name="farmnotify_weather_storm_msg" text="Starker Wind und Regen — Helfer zurückziehen."/>
     <!-- UI -->
-    <text name="farmnotify_inbox_title">Benachrichtigungen</text>
-    <text name="farmnotify_no_notifications">Keine Benachrichtigungen.</text>
-    <text name="farmnotify_tap_navigate">Tippen: Feld anzeigen</text>
-    <text name="farmnotify_unread_count">%d ungelesen</text>
-    <text name="farmnotify_inbox_open_hint">[N] Posteingang</text>
-    <text name="farmnotify_inbox_close_hint">[N] Schliessen</text>
-    <text name="farmnotify_field_badge">Feld</text>
+    <text name="farmnotify_inbox_title" text="Benachrichtigungen"/>
+    <text name="farmnotify_no_notifications" text="Keine Benachrichtigungen."/>
+    <text name="farmnotify_tap_navigate" text="Tippen: Feld anzeigen"/>
+    <text name="farmnotify_unread_count" text="%d ungelesen"/>
+    <text name="farmnotify_inbox_open_hint" text="[N] Posteingang"/>
+    <text name="farmnotify_inbox_close_hint" text="[N] Schliessen"/>
+    <text name="farmnotify_field_badge" text="Feld"/>
     <!-- Settings -->
-    <text name="farmnotify_settings_title">FarmNotify Einstellungen</text>
-    <text name="farmnotify_settings_phone_model">Handy-Modell</text>
-    <text name="farmnotify_settings_volume">Lautstärke</text>
-    <text name="farmnotify_settings_show_popups">Popups anzeigen</text>
-    <text name="farmnotify_settings_popup_duration">Anzeigedauer (Sekunden)</text>
-    <text name="farmnotify_phone_iphone">iPhone 16 Pro Max</text>
-    <text name="farmnotify_phone_samsung">Samsung Galaxy S26 Ultra</text>
+    <text name="farmnotify_settings_title" text="FarmNotify Einstellungen"/>
+    <text name="farmnotify_settings_phone_model" text="Handy-Modell"/>
+    <text name="farmnotify_settings_volume" text="Lautstärke"/>
+    <text name="farmnotify_settings_show_popups" text="Popups anzeigen"/>
+    <text name="farmnotify_settings_popup_duration" text="Anzeigedauer (Sekunden)"/>
+    <text name="farmnotify_phone_iphone" text="iPhone 16 Pro Max"/>
+    <text name="farmnotify_phone_samsung" text="Samsung Galaxy S26 Ultra"/>
     <!-- Input actions -->
-    <text name="input_FARMNOTIFY_TOGGLE_INBOX">FarmNotify: Posteingang öffnen/schließen</text>
-    <text name="input_FARMNOTIFY_DISMISS">FarmNotify: Anzeige schließen</text>
-    <text name="input_FARMNOTIFY_SCROLL_UP">FarmNotify: Nach oben blättern</text>
-    <text name="input_FARMNOTIFY_SCROLL_DOWN">FarmNotify: Nach unten blättern</text>
+    <text name="input_FARMNOTIFY_TOGGLE_INBOX" text="FarmNotify: Posteingang öffnen/schließen"/>
+    <text name="input_FARMNOTIFY_DISMISS" text="FarmNotify: Anzeige schließen"/>
+    <text name="input_FARMNOTIFY_SCROLL_UP" text="FarmNotify: Nach oben blättern"/>
+    <text name="input_FARMNOTIFY_SCROLL_DOWN" text="FarmNotify: Nach unten blättern"/>
+    </texts>
 </l10n>

@@ -33,7 +33,7 @@ end
 function FarmNotifySettings:load()
     local path = self:getFilePath()
     local xmlFile = fileExists(path) and loadXMLFile("FarmNotifySettings", path) or nil
-    if xmlFile == nil then
+    if xmlFile == nil or xmlFile == 0 then
         print("[FarmNotify] No settings file found — using defaults.")
         return
     end
@@ -65,7 +65,7 @@ end
 function FarmNotifySettings:save()
     local path = self:getFilePath()
     local xmlFile = createXMLFile("FarmNotifySettings", path, "FarmNotifySettings")
-    if xmlFile == nil then
+    if xmlFile == nil or xmlFile == 0 then
         print("[FarmNotify] ERROR: Could not save settings.")
         return
     end
@@ -76,9 +76,9 @@ function FarmNotifySettings:save()
     setXMLInt   (xmlFile, "FarmNotifySettings.popupDuration", self.current.popupDuration)
     setXMLString(xmlFile, "FarmNotifySettings.position",      self.current.position)
 
-    saveXMLFile(xmlFile)
+    local saved = saveXMLFile(xmlFile)
     delete(xmlFile)
-    print("[FarmNotify] Settings saved.")
+    print(saved and "[FarmNotify] Settings saved." or "[FarmNotify] ERROR: Settings write failed.")
 end
 
 function FarmNotifySettings:get(key)

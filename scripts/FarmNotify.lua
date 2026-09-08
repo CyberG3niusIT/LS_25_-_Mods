@@ -3,7 +3,7 @@
 
 FarmNotify = {}
 FarmNotify.MOD_NAME   = g_currentModName
-FarmNotify.VERSION    = "1.1.0"
+FarmNotify.VERSION    = "1.1.1"
 FarmNotify.modDir     = g_currentModDirectory
 
 -- Subsystem references (set in :init)
@@ -25,18 +25,20 @@ function FarmNotify:init()
         print("[FarmNotify] Already initialized — cleaning up before reinit.")
         self:delete()
     end
-    self.initialized = true
-    self.headless = g_dedicatedServer == true
+    self.headless = g_dedicatedServer ~= nil and g_dedicatedServer ~= false
+    self.historyLoaded = false
+    self.saveGeneration = 0
+    self.lastSavePath = nil
+    self.started = false
 
     NotificationManager:init()
 
     -- A dedicated server does not need local notification detection or UI.
     if self.headless then
+        self.initialized = true
         print("[FarmNotify] Dedicated Server detected — running in headless compatibility mode.")
         return
     end
-
-    math.randomseed(getTime())
 
     -- Settings (phone model, volume, etc.)
     FarmNotifySettings:init()
@@ -54,7 +56,6 @@ function FarmNotify:init()
     -- Animator
     PhoneAnimator:init(self.settings:get("popupDuration"))
     self.animator = PhoneAnimator
-    self:registerInputActions()
 
     -- Wire animator callbacks
     self.animator.onSlideInComplete = function()
@@ -65,18 +66,43 @@ function FarmNotify:init()
         FarmNotify:_tryShowNextNotification()
     end
 
+    self.initialized = true
     print("[FarmNotify] All systems initialized.")
+end
+
+function FarmNotify:isGameStarted()
+    local mission = g_currentMission
+    if mission == nil then return false end
+    if mission.getIsMissionStarted ~= nil then return mission:getIsMissionStarted() end
+    if mission.isMissionStarted ~= nil then return mission.isMissionStarted end
+    return mission.isRunning == true
+end
+
+function FarmNotify:isGuiVisible()
+    return g_gui ~= nil and g_gui:getIsGuiVisible()
 end
 
 function FarmNotify:update(dt)
     if not self.initialized or self.headless then return end
-    if g_currentMission == nil then return end
-    local dynamicInfo = g_currentMission.missionDynamicInfo
-    if dynamicInfo ~= nil and not dynamicInfo.isStarted then return end
+    if not self:isGameStarted() then return end
+    if not self.started then
+        self.started = true
+        self:loadHistory()
+        self:installSaveHook()
+        self:registerInputActions()
+    end
+    dt = math.max(0, tonumber(dt) or 0)
+    local previousFarm = NotificationManager.farmId
+    EventDetector:syncFarm()
+    if previousFarm ~= NotificationManager.farmId then
+        PhoneAnimator:init(self.settings:get("popupDuration"))
+        self:_setInboxMouseCursor(false)
+    end
+    self:updateInputActions()
 
     EventDetector:update(dt)
     MapNavigator:update(dt)
-    PhoneAnimator:update(dt)
+    if not self:isGuiVisible() then PhoneAnimator:update(dt) end
 
     -- Check for new notifications to show
     if self.animator ~= nil and self.animator.state == PhoneAnimator.STATE.HIDDEN then
@@ -86,14 +112,14 @@ end
 
 function FarmNotify:draw()
     if not self.initialized or self.headless or g_currentMission == nil then return end
-    if g_gui ~= nil and g_gui:getIsGuiVisible() and not PhoneAnimator:isInboxOpen() then return end
+    if not self.started or self:isGuiVisible() then return end
     PhoneUI:draw()
 end
 
 -- ─── Notification Display ──────────────────────────────────────────────────
 
 function FarmNotify:_tryShowNextNotification()
-    if self.headless or self.settings == nil then return end
+    if self.headless or self.settings == nil or self:isGuiVisible() then return end
     if not self.settings:get("showPopups") then
         NotificationManager:clearPendingPopups()
         return
@@ -101,9 +127,10 @@ function FarmNotify:_tryShowNextNotification()
     local notif = NotificationManager:peekNext()
     if notif == nil then return end
 
-    NotificationManager:markDisplayed(notif.id)
-    SoundController:play(notif.type)
-    PhoneAnimator:showNotification(notif)
+    if PhoneAnimator:showNotification(notif) then
+        NotificationManager:markDisplayed(notif.id)
+        SoundController:play(notif.type)
+    end
 end
 
 -- ─── Input ─────────────────────────────────────────────────────────────────
@@ -133,6 +160,17 @@ function FarmNotify:registerInputActions()
             end
         end
     end
+    self:updateInputActions()
+end
+
+function FarmNotify:updateInputActions()
+    if g_inputBinding == nil or g_inputBinding.setActionEventActive == nil then return end
+    local available = self.started and not self:isGuiVisible()
+    for i, eventId in ipairs(self.actionEventIds) do
+        local active = available and (i == 1 or (i == 2 and self.animator:isVisible())
+            or (i > 2 and self.animator:isInboxInteractive()))
+        g_inputBinding:setActionEventActive(eventId, active)
+    end
 end
 
 function FarmNotify:removeInputActions()
@@ -147,22 +185,29 @@ end
 function FarmNotify:_setInboxMouseCursor(show)
     if g_inputBinding == nil or g_inputBinding.setShowMouseCursor == nil then return end
     if show then
+        if not self._mouseCursorOwned then
+            self._previousCursorVisible = g_inputBinding.getShowMouseCursor ~= nil
+                and g_inputBinding:getShowMouseCursor() or false
+        end
         g_inputBinding:setShowMouseCursor(true)
         self._mouseCursorOwned = true
     elseif self._mouseCursorOwned then
-        g_inputBinding:setShowMouseCursor(false)
+        if not self:isGuiVisible() then
+            g_inputBinding:setShowMouseCursor(self._previousCursorVisible == true)
+        end
         self._mouseCursorOwned = false
     end
 end
 
 function FarmNotify:onToggleInbox()
-    if self.animator == nil then return end
+    if self.animator == nil or self:isGuiVisible() then return end
     self.animator:toggleInbox()
     local isOpen = self.animator:isInboxOpen()
     self:_setInboxMouseCursor(isOpen)
 end
 
 function FarmNotify:onDismiss()
+    if self:isGuiVisible() then return end
     if self.animator ~= nil and self.animator:isInboxOpen() then
         self.animator:closeInbox()
         self:_setInboxMouseCursor(false)
@@ -180,7 +225,7 @@ function FarmNotify:onScrollDown()
 end
 
 function FarmNotify:mouseEvent(posX, posY, isDown, isUp, button, eventUsed)
-    if eventUsed or self.headless or self.animator == nil or not self.animator:isVisible() then
+    if eventUsed or self.headless or self:isGuiVisible() or self.animator == nil or not self.animator:isVisible() then
         return eventUsed
     end
     if isDown and button == Input.MOUSE_BUTTON_LEFT and PhoneUI:handleClick(posX, posY) then
@@ -198,6 +243,86 @@ end
 
 function FarmNotify:loadFromXML(xmlFile, key)
     NotificationManager:loadFromXML(xmlFile, key .. ".notifications")
+end
+
+-- Two alternating snapshots avoid deleting the last known-good history.
+-- No os.rename/remove dependency in the GIANTS mod sandbox.
+function FarmNotify:getSavePaths()
+    local info = g_currentMission and g_currentMission.missionInfo
+    local directory = info and info.savegameDirectory
+    if directory == nil then return nil end
+    return {directory .. "/farmnotify.xml", directory .. "/farmnotify.backup.xml"}
+end
+
+function FarmNotify:loadHistory()
+    local paths = self:getSavePaths()
+    self.historyLoaded = true
+    if paths == nil then return end
+    local best, bestGeneration, bestPath = nil, -1, nil
+    for _, path in ipairs(paths) do
+        local xml = fileExists(path) and loadXMLFile("FarmNotifyHistory", path) or nil
+        if xml ~= nil and xml ~= 0 then
+            local generation = getXMLInt(xml, "FarmNotify#generation")
+            local complete = getXMLBool(xml, "FarmNotify#complete")
+            local count = getXMLInt(xml, "FarmNotify.notifications#count")
+            local valid = (generation ~= nil and complete == true) or
+                (generation == nil and count ~= nil and getXMLString(xml, "FarmNotify#version") ~= nil)
+            if valid and (generation or 0) > bestGeneration then
+                if best ~= nil then delete(best) end
+                best, bestGeneration, bestPath = xml, generation or 0, path
+            else
+                delete(xml)
+            end
+        end
+    end
+    if best ~= nil then
+        self:loadFromXML(best, "FarmNotify")
+        delete(best)
+        self.saveGeneration, self.lastSavePath = bestGeneration, bestPath
+    end
+end
+
+function FarmNotify:saveHistory()
+    if not self.initialized or self.headless or not self.historyLoaded then return false end
+    local paths = self:getSavePaths()
+    if paths == nil then return false end
+    local target = self.lastSavePath == paths[1] and paths[2] or paths[1]
+    local xml = createXMLFile("FarmNotifyHistory", target, "FarmNotify")
+    if xml == nil or xml == 0 then return false end
+    local generation = self.saveGeneration + 1
+    local ok, result = pcall(function()
+        self:saveToXML(xml, "FarmNotify")
+        setXMLInt(xml, "FarmNotify#generation", generation)
+        setXMLBool(xml, "FarmNotify#complete", true)
+        return saveXMLFile(xml)
+    end)
+    delete(xml)
+    if not ok or result ~= true then
+        print("[FarmNotify] History write failed; previous snapshot preserved.")
+        return false
+    end
+    self.saveGeneration, self.lastSavePath = generation, target
+    return true
+end
+
+function FarmNotify:installSaveHook()
+    local mission = g_currentMission
+    if mission == nil or type(mission.saveSavegame) ~= "function" then
+        print("[FarmNotify] No saveSavegame method; history will save on map exit.")
+        return
+    end
+    self._saveMission = mission
+    self._saveOwnMethod = rawget(mission, "saveSavegame")
+    local original = mission.saveSavegame
+    local function pack(...) return {n = select("#", ...), ...} end
+    self._saveWrapper = function(instance, ...)
+        local results = pack(original(instance, ...))
+        if FarmNotify.initialized and FarmNotify._saveMission == instance then
+            FarmNotify:saveHistory()
+        end
+        return unpack(results, 1, results.n)
+    end
+    mission.saveSavegame = self._saveWrapper
 end
 
 -- ─── Settings API (called from mod options UI) ────────────────────────────
@@ -228,9 +353,15 @@ end
 
 function FarmNotify:delete()
     if not self.initialized then return end
+    self:saveHistory()
+    if self._saveMission ~= nil and self._saveMission.saveSavegame == self._saveWrapper then
+        self._saveMission.saveSavegame = self._saveOwnMethod
+    end
+    self._saveMission, self._saveWrapper, self._saveOwnMethod = nil, nil, nil
     self:removeInputActions()
     self:_setInboxMouseCursor(false)
     if not self.headless then
+        EventDetector:delete()
         SoundController:delete()
         PhoneModel:delete()
         PhoneUI:delete()
@@ -239,6 +370,7 @@ function FarmNotify:delete()
     self.settings = nil
     self.headless = false
     self.initialized = false
+    self.started = false
     print("[FarmNotify] Shutdown complete.")
 end
 
@@ -260,43 +392,6 @@ end
 
 function modEventListener:mouseEvent(posX, posY, isDown, isUp, button, eventUsed)
     return FarmNotify:mouseEvent(posX, posY, isDown, isUp, button, eventUsed)
-end
-
-function modEventListener:saveSavegame()
-    if FarmNotify.initialized and not FarmNotify.headless and g_currentMission and g_currentMission.missionInfo then
-        local saveDir = g_currentMission.missionInfo.savegameDirectory
-        if saveDir then
-            -- Atomic write: save to .tmp then rename to avoid a corrupt
-            -- save file if the game crashes mid-write
-            local tmpPath   = saveDir .. "/farmnotify.xml.tmp"
-            local finalPath = saveDir .. "/farmnotify.xml"
-            local xmlFile = createXMLFile("FarmNotifySave", tmpPath, "FarmNotify")
-            if xmlFile ~= nil then
-                FarmNotify:saveToXML(xmlFile, "FarmNotify")
-                saveXMLFile(xmlFile)
-                delete(xmlFile)
-                os.remove(finalPath)
-                local ok, err = os.rename(tmpPath, finalPath)
-                if not ok then
-                    print("[FarmNotify] Save rename failed: " .. tostring(err))
-                end
-            end
-        end
-    end
-end
-
-function modEventListener:loadMapFinished()
-    if FarmNotify.initialized and not FarmNotify.headless and g_currentMission then
-        local saveDir = g_currentMission.missionInfo.savegameDirectory
-        if saveDir then
-            local path = saveDir .. "/farmnotify.xml"
-            local xmlFile = fileExists(path) and loadXMLFile("FarmNotifySave", path) or nil
-            if xmlFile ~= nil then
-                FarmNotify:loadFromXML(xmlFile, "FarmNotify")
-                delete(xmlFile)
-            end
-        end
-    end
 end
 
 function modEventListener:deleteMap()

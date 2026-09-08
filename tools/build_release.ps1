@@ -46,26 +46,24 @@ foreach ($relativePath in $runtimeFiles) {
 }
 
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
-if (Test-Path -LiteralPath $zipPath) {
-    Remove-Item -LiteralPath $zipPath -Force
-}
-
-$stagingDirectory = Join-Path $outputDirectory (".farmnotify-" + [guid]::NewGuid().ToString("N"))
-New-Item -ItemType Directory -Path $stagingDirectory | Out-Null
-
+$temporaryZip = Join-Path $outputDirectory (".farmnotify-" + [guid]::NewGuid().ToString("N") + ".zip")
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 try {
-    foreach ($relativePath in $runtimeFiles) {
-        $source = Join-Path $projectRoot $relativePath
-        $target = Join-Path $stagingDirectory $relativePath
-        $targetDirectory = Split-Path -Parent $target
-        New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
-        Copy-Item -LiteralPath $source -Destination $target
+    $archive = [IO.Compression.ZipFile]::Open($temporaryZip, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($relativePath in $runtimeFiles) {
+            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $archive, (Join-Path $projectRoot $relativePath), $relativePath.Replace('\', '/'),
+                [IO.Compression.CompressionLevel]::Optimal
+            ) | Out-Null
+        }
+    } finally {
+        $archive.Dispose()
     }
-
-    Compress-Archive -Path (Join-Path $stagingDirectory "*") -DestinationPath $zipPath -CompressionLevel Optimal
+    Move-Item -LiteralPath $temporaryZip -Destination $zipPath -Force
 } finally {
-    if (Test-Path -LiteralPath $stagingDirectory) {
-        Remove-Item -LiteralPath $stagingDirectory -Recurse -Force
+    if (Test-Path -LiteralPath $temporaryZip) {
+        Remove-Item -LiteralPath $temporaryZip -Force
     }
 }
 

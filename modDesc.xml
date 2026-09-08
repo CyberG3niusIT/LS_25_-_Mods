@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="110">
     <author>CyberG3nius</author>
-    <version>1.1.0.0</version>
+    <version>1.1.1.0</version>
     <title>
         <en>FarmNotify</en>
         <de>FarmNotify</de>
     </title>
     <description>
-        <en>Real smartphone notification system for Farming Simulator 25. Receive live alerts on a rendered iPhone or Samsung Galaxy when fields are harvest-ready, workers finish, fuel runs low, or bad weather is incoming. Choose your phone model in the mod settings.</en>
-        <de>Echtes Smartphone-Benachrichtigungssystem für den Landwirtschafts-Simulator 25. Erhalte Live-Meldungen auf einem gerenderten iPhone oder Samsung Galaxy wenn Felder erntereif sind, Helfer fertig sind, Tank leer wird oder schlechtes Wetter droht. Wähle dein Handy-Modell in den Mod-Einstellungen.</de>
+        <en>Smartphone notifications for Farming Simulator 25: harvest-ready fields, AI job results, low fuel, full silos and rain starting. Phone model and display settings are available in the inbox.</en>
+        <de>Smartphone-Benachrichtigungen für Landwirtschafts-Simulator 25: erntereife Felder, Helfergebnisse, niedriger Tankstand, volle Silos und einsetzender Regen. Handy-Modell und Anzeigeoptionen sind im Posteingang einstellbar.</de>
     </description>
     <iconFilename>textures/icons/icon_farmnotify.dds</iconFilename>
     <multiplayer supported="true"/>
